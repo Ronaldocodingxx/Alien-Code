@@ -1,0 +1,2 @@
+# imported by browser code from another folder (../shared)
+pub fn shout(s) upper(s) + "!"

@@ -31,8 +31,14 @@ MIME := {
   ".mp4": "video/mp4", ".mp3": "audio/mpeg", ".pdf": "application/pdf",
 }
 
-pub fn reply(status, body, ctype = nil, headers = {}) {__reply: true, status, body, ctype, headers}
-pub fn redirect(to) reply(302, "", nil, {Location: to})
+# reply(status, body, opts?) -> full control over a response. opts: {type, headers, cookies}
+# (old form reply(status, body, contentType, headers) still works). cookies: {name: "value" | {value, maxAge, path, httpOnly, sameSite, secure} | nil (= delete)}
+pub fn reply(status, body, opts = {}, headers = {}) {
+  o := if type(opts) == "str" { {type: opts, headers} } else { opts ?? {} }
+  {__reply: true, status, body, ctype: o.type, headers: o.headers ?? {}, cookies: o.cookies}
+}
+# redirect(url, opts?) -> 303 See Other (right after a form POST, fine for GET). opts like reply: {status, cookies, headers}
+pub fn redirect(to, opts = {}) reply(opts.status ?? 303, "", {headers: {...(opts.headers ?? {}), Location: to}, cookies: opts.cookies})
 
 fn send(res, status, ctype, body, headers = {}) {
   res.writeHead(status, {"Content-Type": ctype, ...headers})
@@ -42,40 +48,72 @@ fn send(res, status, ctype, body, headers = {}) {
 fn guess(x) if type(x) == "str" || html.isRaw(x) { HTML } else { MIME[".json"] }
 fn bodyOf(x) if type(x) == "str" { x } else if html.isRaw(x) { x.__html } else { tojson(x) }
 
+# Set-Cookie header lines; secure defaults: Path=/, HttpOnly, SameSite=Lax
+fn cookieLines(cookies) entries(cookies ?? {}) |> map(fn([name, c]) {
+  o := if c == nil { {value: "", maxAge: 0} } else if type(c) == "obj" { c } else { {value: str(c)} }
+  parts := ["{name}={encodeURIComponent(o.value ?? "")}", "Path={o.path ?? "/"}"]
+  if o.maxAge != nil { push(parts, "Max-Age={o.maxAge}") }
+  if o.httpOnly != false { push(parts, "HttpOnly") }
+  push(parts, "SameSite={o.sameSite ?? "Lax"}")
+  if o.secure { push(parts, "Secure") }
+  join(parts, "; ")
+})
+
 fn respond(res, out) {
   if out != nil && out.__reply == true {
-    ret send(res, out.status, out.ctype ?? guess(out.body), bodyOf(out.body), out.headers)
+    headers := {...out.headers}
+    if out.cookies != nil { headers["Set-Cookie"] = cookieLines(out.cookies) }
+    ret send(res, out.status, out.ctype ?? guess(out.body), bodyOf(out.body), headers)
   }
   send(res, 200, guess(out), bodyOf(out))
 }
 
+# request body: JSON and HTML forms (urlencoded) become objects, other text stays text, empty -> nil
 fn readBody(req) new Promise(fn(done) {
   chunks := []
   req.on("data", fn(c) push(chunks, c))
   req.on("end", fn() {
     text := Buffer.concat(chunks).toString()
-    done(if text == "" { nil } else { try { json(text) } catch { text } })
+    ctype := req.headers["content-type"] ?? ""
+    done(if text == "" { nil }
+      else if has(ctype, "application/x-www-form-urlencoded") { Object.fromEntries(new URLSearchParams(text)) }
+      else { try { json(text) } catch { text } })
   })
 })
 
-# "/user/:id" matches "/user/7" -> {id: "7"}
+# cookies sent by the browser -> {name: value}
+fn readCookies(req) split(req.headers.cookie ?? "", ";")
+  |> map(trim(it))
+  |> filter(has(it, "="))
+  |> map(fn(c) [slice(c, 0, c.indexOf("=")), decodeURIComponent(slice(c, c.indexOf("=") + 1))])
+  |> Object.fromEntries
+
+# "/user/:id" matches "/user/7" -> {id: "7"}; a trailing "*" matches the rest: "/files/*" -> {"*": "a/b.txt"}
 fn matchPath(pat, p) {
+  if pat == "*" { ret {"*": slice(p, 1)} }
   a := split(pat, "/")
   b := split(p, "/")
-  if len(a) != len(b) { ret nil }
+  wild := last(a) == "*"
+  if (wild && len(b) < len(a) - 1) || (!wild && len(a) != len(b)) { ret nil }
   params := {}
   for i in 0..len(a) {
+    if a[i] == "*" && i == len(a) - 1 {
+      params["*"] = decodeURIComponent(join(drop(b, i), "/"))
+      ret params
+    }
     if starts(a[i], ":") { params[slice(a[i], 1)] = decodeURIComponent(b[i]) }
     else if a[i] != b[i] { ret nil }
   }
   params
 }
 
-fn findRoute(routes, method, p) {
+# first matching route; wildcard routes ("*", "/x/*") only when nothing else matched (wild = true)
+fn findRoute(routes, method, p, wild = false) {
   for [key, f] in entries(routes) {
     parts := split(key, " ")
     [m, pat] := if len(parts) == 2 { parts } else { [nil, key] }
     if m != nil && m != method { continue }
+    if ends(pat, "*") != wild { continue }
     params := matchPath(pat, p)
     if params != nil { ret [f, params] }
   }
@@ -84,43 +122,25 @@ fn findRoute(routes, method, p) {
 
 # ---------- browser code ----------
 
-roots := []            # directories of client entry files; URL /_alien/c/<i>/<file>
-allowed := new Set()   # absolute .aln paths the browser may load (entries + their imports)
+# client(file) -> <script> tag that runs this .aln file in the browser (compiled on request)
+pub fn client(file) raw("<script type=\"module\" src=\"{fileUrl(path.resolve(file))}\"></script>")
 
-pub fn client(file) {
-  abs := path.resolve(file)
-  dir := path.dirname(abs)
-  i := index(roots, dir)
-  if i == nil {
-    push(roots, dir)
-    i = len(roots) - 1
-  }
-  allowed.add(abs)
-  raw("<script type=\"module\" src=\"/_alien/c/{i}/{path.basename(abs)}\"></script>")
-}
-
-fn browserJs(file, urlPath) {
-  r := compile(fs.readFileSync(file, "utf8"), {
-    displayFile: path.basename(file),
-    runtimeUrl: "/_alien/rt.js",
-    stdSpec: fn(n) "/_alien/std/{n}.aln",
-    sourceUrl: urlPath,
-  })
-  for d in r.deps {
-    if d.std == nil { allowed.add(path.resolve(path.dirname(file), d.path)) }
-  }
-  r.code
-}
+fn browserJs(file, urlPath) compile(fs.readFileSync(file, "utf8"), {
+  displayFile: path.basename(file),
+  runtimeUrl: "/_alien/rt.js",
+  stdSpec: fn(n) "/_alien/std/{n}.aln",
+  alnSpec: fn(p) fileUrl(path.resolve(path.dirname(file), p)),
+  sourceUrl: urlPath,
+}).code
 
 fn serveAlien(res, p) {
   if p == "/_alien/rt.js" { ret send(res, 200, JS, fs.readFileSync(path.join(here, "../src/runtime.js"))) }
-  file := match p.match(js.RegExp("^/_alien/(std|c)/(?:(\\d+)/)?(.+)$")) {
-    [_, "std", _, name] => path.join(here, path.basename(name))
-    [_, "c", i, rel] => path.join(roots[int(i)] ?? "/nonexistent", decodeURIComponent(rel))
+  file := match p.match(js.RegExp("^/_alien/(std|f)/([^/]+)(?:/.*)?$")) {
+    [_, "std", name] => path.join(here, path.basename(name))
+    [_, "f", i] => files[int(i)]
     _ => nil
   }
-  isStd := file != nil && path.dirname(file) == path.resolve(here)
-  if file == nil || (!isStd && !allowed.has(file)) || !exists(file) { ret send(res, 404, JS, "// not found") }
+  if file == nil || !exists(file) { ret send(res, 404, JS, "// not found") }
   code := try { browserJs(file, p) } catch e {
     print(e.message)
     "console.error({tojson("Alien compile error in " + p + ": " + e.message)})"
@@ -130,27 +150,27 @@ fn serveAlien(res, p) {
 
 # ---------- server ----------
 
+# order: /_alien/ internals, exact routes, static files, wildcard routes ("*"), 404
 fn handle(routes, dir, req, res) {
   u := new URL(req.url, "http://localhost")
   p := u.pathname
   if starts(p, "/_alien/") { ret serveAlien(res, p) }
   found := findRoute(routes, req.method, p)
-  if found != nil {
-    [f, params] := found
-    body := await readBody(req)
-    r := {method: req.method, path: p, params, query: Object.fromEntries(u.searchParams), headers: req.headers, body, req, res}
-    out := await f(r)
-    if !res.writableEnded { respond(res, out) }
-    ret nil
-  }
-  if dir != nil {
+  if found == nil && dir != nil {
     root := path.resolve(dir)
     file := path.join(root, path.normalize(decodeURIComponent(if p == "/" { "/index.html" } else { p })))
     if starts(file, root) && exists(file) && fs.statSync(file).isFile() {
       ret send(res, 200, MIME[lower(path.extname(file))] ?? "application/octet-stream", fs.readFileSync(file))
     }
   }
-  send(res, 404, HTML, "<h1>404 Not Found</h1>")
+  found = found ?? findRoute(routes, req.method, p, true)
+  if found == nil { ret send(res, 404, HTML, "<h1>404 Not Found</h1>") }
+  [f, params] := found
+  body := await readBody(req)
+  r := {method: req.method, path: p, params, query: Object.fromEntries(u.searchParams), headers: req.headers, cookies: readCookies(req), body, req, res}
+  out := await f(r)
+  if !res.writableEnded { respond(res, out) }
+  nil
 }
 
 pub fn serve(routes, opts = {}) {
@@ -165,4 +185,17 @@ pub fn serve(routes, opts = {}) {
     if !opts.quiet { print("👽 Server läuft: http://localhost:{server.address().port}") }
   })
   server
+}
+
+# browser-loadable .aln files: client entries and everything they import (nothing else is served)
+files := []
+
+fileIds := new Map()
+
+fn fileUrl(abs) {
+  if !fileIds.has(abs) {
+    push(files, abs)
+    fileIds.set(abs, len(files) - 1)
+  }
+  "/_alien/f/{fileIds.get(abs)}/{path.basename(abs)}"
 }

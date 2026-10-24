@@ -1,4 +1,6 @@
 # browser code used by tests/cases/web.aln
 use "alien:html" {h}
 use "./util.aln" {greet}
-document.body.innerHTML += h.p(greet("browser")).__html
+use "./shared/fmt.aln" {shout}
+data := json(document.getElementById("data").textContent)
+document.body.innerHTML += h.p(shout(greet(data.name))).__html

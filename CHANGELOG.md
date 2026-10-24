@@ -4,6 +4,19 @@ All notable changes. Agents: add entries under `## Unreleased`; mark breaking ch
 
 ## Unreleased
 
+## 0.5.0 — 2026-10-24
+
+From the feedback of two independent agents building the same Kanban app, and an A/B test against JavaScript:
+- Fix: `css()` with selector lists and `&` (`".a, .b": {"&:focus"}` now gives `.a:focus, .b:focus`, like Sass).
+- Fix: `str()` / string interpolation use an object's own `toString` (URL, URLSearchParams); `repr` shows `URL("...")`.
+- Web: urlencoded form bodies parsed, `req.cookies`, cookies in `reply`/`redirect` with secure defaults,
+  `redirect` defaults to 303 and takes `{status, cookies, headers}`, wildcard routes (`"/files/*"`, `"*"` = 404 page),
+  `h.json(id, value)` for safe data embedding, browser code may import .aln files from other folders, `css(a, b, ...)`.
+- **BREAKING (small):** `redirect(url)` answers 303 instead of 302 (use `redirect(url, {status: 302})` for the old behavior).
+- Language: `.5` number literals, `x?.[i]` and `f?.(args)`, `del(obj, ...keys)`, clear error for `fn f() for ...`.
+- Tools: `alien put file` without a name replaces several parts at once; `put` can repair files that do not parse;
+  `alien map` names event handlers `on:click`.
+
 ## 0.4.0 — 2026-10-24
 
 - Code map for agents: `alien map` (parts with lines, ~tokens, uses/used-by, doc comments), `alien show`

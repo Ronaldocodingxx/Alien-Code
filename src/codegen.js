@@ -237,7 +237,8 @@ class Gen {
     const aln = std !== null || s.path.endsWith(".aln");
     if (aln) this.deps.push({ path: s.path, std, line: s.line, col: s.col });
     if (std !== null && !this.o.stdSpec) throw this.err("E050", `standard module '${s.path}' is not available here`, s);
-    const spec = JSON.stringify(std !== null ? this.o.stdSpec(std) : aln && this.o.alnExt ? s.path.slice(0, -4) + this.o.alnExt : s.path);
+    // alnSpec: caller maps .aln imports to its own URLs (alien:web browser code)
+    const spec = JSON.stringify(std !== null ? this.o.stdSpec(std) : aln && this.o.alnSpec ? this.o.alnSpec(s.path) : aln && this.o.alnExt ? s.path.slice(0, -4) + this.o.alnExt : s.path);
     if (s.alias) {
       this.declare(s.alias, scope, s);
       const a = mangle(s.alias);
@@ -519,7 +520,7 @@ class Gen {
         const o = this.expr(e.obj, scope);
         return `${e.obj.k === "Num" ? `(${o})` : o}${e.opt ? "?." : "."}${e.name}`;
       }
-      case "Index": return `${this.expr(e.obj, scope)}[${this.expr(e.index, scope)}]`;
+      case "Index": return `${this.expr(e.obj, scope)}${e.opt ? "?." : ""}[${this.expr(e.index, scope)}]`;
       case "Fn": return this.fn(e, scope, null);
       case "New": return `new ${this.expr(e.callee, scope)}(${e.args.map((x) => this.arg(x, scope)).join(", ")})`;
       case "If": return this.simpleIf(e) ? this.ternary(e, scope) : this.iife(e, scope);
@@ -566,7 +567,7 @@ class Gen {
       const p = { k: "PId", name: "it", line: x.line, col: x.col, internal: true };
       return { k: "Fn", params: [{ rest: false, pat: p, def: null }], body: x, line: x.line, col: x.col, pos: x.pos, end: x.end };
     });
-    return `${this.expr(c, scope)}(${args.map((x) => this.arg(x, scope)).join(", ")})`;
+    return `${this.expr(c, scope)}${e.opt ? "?." : ""}(${args.map((x) => this.arg(x, scope)).join(", ")})`;
   }
 
   simpleBlock(b) { return b.body.length === 0 || (b.body.length === 1 && b.body[0].k === "ExprStmt"); }

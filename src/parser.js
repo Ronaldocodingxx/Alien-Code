@@ -221,6 +221,8 @@ class Parser {
     if (this.looksLikeObject()) return this.object();
     if (this.isOp("{")) return this.block();
     if (this.atStmtEnd()) throw this.err("E010", "missing function body", this.tok, "write fn f(x) x * 2   or   fn f(x) { ... } (body starts on the same line)");
+    if (this.tok.t === "kw" && ["for", "while", "ret", "break", "continue", "throw"].includes(this.tok.v))
+      throw this.err("E010", `'${this.tok.v}' is a statement and cannot be a single-expression body`, this.tok, `wrap the body in braces: fn f(x) { ${this.tok.v} ... }`);
     return this.expr();
   }
 
@@ -389,6 +391,19 @@ class Parser {
         e = { k: "Index", obj: e, index, line: e.line, col: e.col, pos: e.pos, end: close.end };
       } else if (this.cont("op", [".", "?."])) {
         const opt = this.next().v === "?.";
+        // x?.[i] and f?.(args)
+        if (opt && this.isOp("[")) {
+          this.next();
+          const index = this.expr();
+          const close = this.expect("op", "]", "']'");
+          e = { k: "Index", obj: e, index, opt: true, line: e.line, col: e.col, pos: e.pos, end: close.end };
+          continue;
+        }
+        if (opt && this.isOp("(")) {
+          const args = this.args(")");
+          e = { k: "Call", callee: e, args, opt: true, line: e.line, col: e.col, pos: e.pos, end: this.toks[this.i - 1].end };
+          continue;
+        }
         const n = this.tok;
         if (n.t !== "id" && n.t !== "kw") throw this.err("E010", `expected field name after '.', found ${desc(n)}`);
         this.next();

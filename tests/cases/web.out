@@ -1,11 +1,15 @@
-true true true
+true true true true
 {id: "42", q: "z"}
 {a: 1}
-302 /
+{name: "ada", pw: "x y"}
+303 / ["sid=abc%20123; Path=/; HttpOnly; SameSite=Lax", "theme=dark; Path=/; Max-Age=60; SameSite=Lax"]
+{sid: "abc 123", theme: "dark"}
+["sid=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"]
+301
 418 short and stout
 done
-404
-true true
+a/b.txt
+404 true
+/_alien/f/0/app.aln true true true
 200 404
-true
 true

@@ -2,6 +2,8 @@
 // so an agent can read the index, fetch only the parts it needs and replace one part by name.
 //   mapSource(src, file) -> { file, lines, parts: [{name, kind, from, to, sig, doc, tok, uses, usedBy}] }
 //   replacePart(src, file, name, code) -> new source (throws AlienError if `name` is unknown)
+//   replaceParts(src, file, code) -> new source: every top-level part in `code` replaces the part with its name (or is appended)
+// If the file does not parse (e.g. after a bad edit), parts are found by a line scan, so put can still repair it.
 // `from` includes the part's leading # comment lines; ranges are 1-based and inclusive.
 
 import { parse } from "./parser.js";
@@ -31,6 +33,8 @@ function boundIn(n, out = new Set()) {
 
 function stmtName(s) {
   const e = s.k === "ExprStmt" ? s.expr : s.k === "Assign" ? s.target : null;
+  // el.addEventListener("click", ...) -> "on:click"
+  if (e?.k === "Call" && e.callee.k === "Member" && e.callee.name === "addEventListener" && e.args[0]?.k === "Str") return `on:${e.args[0].v}`;
   let c = e?.k === "Call" ? e.callee : e;
   const path = [];
   while (c?.k === "Member") { path.unshift(c.name); c = c.obj; }
@@ -97,12 +101,33 @@ export function mapSource(src, file) {
   return { file, lines: lines.length, tok: tokEstimate(src), parts };
 }
 
+// fallback when the file does not parse: a part starts at a non-indented line that is not a closer or comment
+function scanParts(src, file) {
+  const lines = src.split("\n");
+  const starts = [];
+  lines.forEach((l, i) => { if (/^[^\s#}\])]/.test(l)) starts.push(i + 1); });
+  const parts = starts.map((from, k) => {
+    let to = (starts[k + 1] ?? lines.length + 1) - 1;
+    while (to > from && /^\s*(#.*)?$/.test(lines[to - 1])) to--;
+    let docFrom = from;
+    while (docFrom > 1 && /^#/.test(lines[docFrom - 2])) docFrom--;
+    const l = lines[from - 1];
+    const name = /^(?:pub\s+)?fn\s+(\w+)/.exec(l)?.[1] ?? /^(?:pub\s+)?(\w+)\s*:=/.exec(l)?.[1] ?? `line:${from}`;
+    return { name, kind: "?", from: docFrom, to };
+  });
+  return { file, lines: lines.length, parts };
+}
+
+function mapOrScan(src, file) {
+  try { return mapSource(src, file); } catch (e) { if (e instanceof AlienError) return scanParts(src, file); throw e; }
+}
+
 export function findPart(map, name) {
   return map.parts.find((p) => p.name === name || (/^\d+$/.test(name) && p.from <= +name && +name <= p.to));
 }
 
 export function replacePart(src, file, name, code) {
-  const map = mapSource(src, file);
+  const map = mapOrScan(src, file);
   const p = findPart(map, name);
   const lines = src.split("\n");
   const body = code.replace(/\r\n/g, "\n").replace(/\n+$/, "").split("\n");
@@ -113,4 +138,12 @@ export function replacePart(src, file, name, code) {
     return [...lines, "", ...body, ""].join("\n");
   }
   return [...lines.slice(0, p.from - 1), ...body, ...lines.slice(p.to)].join("\n");
+}
+
+export function replaceParts(src, file, code) {
+  const m = mapSource(code, file);
+  const lines = code.replace(/\r\n/g, "\n").split("\n");
+  let out = src;
+  for (const p of m.parts) out = replacePart(out, file, p.name, lines.slice(p.from - 1, p.to).join("\n"));
+  return { src: out, names: m.parts.map((p) => p.name) };
 }

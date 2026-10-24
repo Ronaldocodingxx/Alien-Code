@@ -1,0 +1,2 @@
+# expect: E010
+fn f(xs) for x in xs { print(x) }

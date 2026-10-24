@@ -54,9 +54,22 @@ pub fn el(tag, ...args) {
 pub h := {}
 for t in TAGS { h[t] = fn(...args) el(t, ...args) }
 
+# h.json(id, value): embeds data for browser code safely (no </script> breakout).
+# Browser: data := json(document.getElementById(id).textContent)
+# Note: other script/style children are NOT escaped; never put user text into them.
+h.json = fn(id, value) raw("<script type=\"application/json\" id=\"{esc(id)}\">{tojson(value).replaceAll("<", "\\u003c")}</script>")
+
+# combines selector lists like Sass: nest(".a, .b", "&:focus") -> ".a:focus, .b:focus"
+fn nest(parent, sel) {
+  if parent == "" { ret sel }
+  ps := split(parent, ",") |> map(trim(it))
+  ss := split(sel, ",") |> map(trim(it))
+  flat(map(ps, fn(p) map(ss, fn(s) if has(s, "&") { replace(s, "&", p) } else { "{p} {s}" }))) |> join(", ")
+}
+
 fn rules(o, parent) entries(o) |> map(fn([sel, body]) {
   if starts(sel, "@") { ret "{sel} \{\n{rules(body, parent)}\n\}" }
-  full := if parent == "" { sel } else if has(sel, "&") { replace(sel, "&", parent) } else { "{parent} {sel}" }
+  full := nest(parent, sel)
   props := filter(entries(body), fn([_, v]) type(v) != "obj")
   nested := filter(entries(body), fn([_, v]) type(v) == "obj")
   own := if len(props) > 0 { "{full} \{ {decls(Object.fromEntries(props))} \}" } else { "" }
@@ -65,7 +78,8 @@ fn rules(o, parent) entries(o) |> map(fn([sel, body]) {
 
 # CSS from nested objects. Property names may be camelCase (fontSize) or quoted ("font-size", "--my-var").
 # Nested keys: "&:hover" (same element) or ".child" (descendant). "@media ..." keys wrap their rules.
-pub fn css(o) raw(rules(o, ""))
+# Several objects may be passed: css(BASE, BOARD) renders them in order (no key collisions between them).
+pub fn css(...os) raw(map(os, rules(it, "")) |> join("\n"))
 
 pub fn page(o) {
   head := [

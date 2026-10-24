@@ -80,6 +80,7 @@ export function repr(x, seen = new Set()) {
     if (x instanceof Set) return `Set{${[...x].map((v) => repr(v, seen)).join(", ")}}`;
     const proto = Object.getPrototypeOf(x);
     const tag = proto && proto !== Object.prototype && proto.constructor?.name ? proto.constructor.name : "";
+    if (tag && x.toString !== Object.prototype.toString) return `${tag}(${JSON.stringify(String(x))})`;
     const body = Object.keys(x).map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : JSON.stringify(k)}: ${repr(x[k], seen)}`);
     return `${tag}{${body.join(", ")}}`;
   } finally {
@@ -93,7 +94,12 @@ const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 // ---------- prelude: core ----------
 
 export function print(...xs) { console.log(xs.map(str).join(" ")); }
-export function str(x) { return typeof x === "string" ? x : repr(x); }
+export function str(x) {
+  if (typeof x === "string") return x;
+  // objects with their own text form (URL, URLSearchParams, Error, class instances) use it; repr() keeps the debug view
+  if (x && typeof x === "object" && !Array.isArray(x) && !(x instanceof Date) && x.toString !== Object.prototype.toString) return String(x);
+  return repr(x);
+}
 export function num(x) { if (x == null || typeof x === "boolean") return null; const n = typeof x === "number" ? x : Number(typeof x === "string" ? x.trim() || NaN : x); return Number.isNaN(n) ? null : n; }
 export function int(x) { const n = num(x); return n === null ? null : Math.trunc(n); }
 export function type(x) {
@@ -188,6 +194,8 @@ export function has(c, x) {
   return Object.hasOwn(c, x);
 }
 export function get(o, k, d = null) { const v = o instanceof Map ? o.get(k) : o?.[k]; return v === undefined ? d : v; }
+// removes keys from an object or Map (mutates) and returns it
+export function del(o, ...ks) { for (const k of ks) o instanceof Map ? o.delete(k) : delete o[k]; return o; }
 export function merge(...os) { return Object.assign({}, ...os); }
 export function copy(x) { return structuredClone(x); }
 

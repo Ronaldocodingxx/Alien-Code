@@ -8,7 +8,7 @@ import { resolve, relative, dirname, join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { compile } from "../src/compile.js";
 import { AlienError } from "../src/errors.js";
-import { mapSource, findPart, replacePart } from "../src/map.js";
+import { mapSource, findPart, replacePart, replaceParts } from "../src/map.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
@@ -28,6 +28,7 @@ usage:
   alien show <file> <name...>      print only these parts (name or a line number)
   alien put <file> <name>          replace part <name> with code from stdin (or --code "..."),
                                    append if new, --delete to remove; refuses if it breaks the build
+  alien put <file>                 (no name) replace every part contained in the code at once
   alien emit <file.aln>            print generated JavaScript
   alien build <file.aln> [-o dir]  write standalone .mjs files (default dir: dist)
   alien spec                       print the language spec (read this first)
@@ -232,11 +233,13 @@ function cmdShow([file, ...names]) {
 
 // replace one part by name (or append when the name is new); only writes if the whole file still compiles
 async function cmdPut(argv) {
-  const [file, name] = argv;
+  const file = argv[0];
+  const name = argv[1] && !argv[1].startsWith("--") ? argv[1] : null;
+  if (!name && !argv.includes("--delete")) return cmdPutMany(file, argv);
   const del = argv.includes("--delete");
   const ci = argv.indexOf("--code");
   let code = ci >= 0 ? argv[ci + 1] : null;
-  if (!name) throw new AlienError("E060", "usage: alien put <file.aln> <name> [--code \"...\" | --delete]  (code from stdin otherwise)", "<cli>", 1, 1);
+  if (!name) throw new AlienError("E060", "usage: alien put <file.aln> [name] [--code \"...\" | --delete]  (code from stdin otherwise)", "<cli>", 1, 1);
   if (del) code = "";
   if (code === null) { const chunks = []; for await (const c of process.stdin) chunks.push(c); code = Buffer.concat(chunks).toString("utf8"); }
   const { abs, src, display } = readAln(file);
@@ -247,6 +250,19 @@ async function cmdPut(argv) {
   const info = { ok: true, file: display, part: p ? { name: p.name, from: p.from, to: p.to } : null, deleted: del };
   if (JSON_OUT) console.log(JSON.stringify(info));
   else console.log(del ? `ok: deleted ${name} from ${display}` : `ok: ${display}:${p ? `${p.from}-${p.to} ${p.name}` : name}`);
+}
+
+// put without a name: replace/append every top-level part contained in the code, then check once
+async function cmdPutMany(file, argv) {
+  const ci = argv.indexOf("--code");
+  let code = ci >= 0 ? argv[ci + 1] : null;
+  if (code === null) { const chunks = []; for await (const c of process.stdin) chunks.push(c); code = Buffer.concat(chunks).toString("utf8"); }
+  const { abs, src, display } = readAln(file);
+  const { src: next, names } = replaceParts(src, display, code);
+  compileFile(abs, next);
+  writeFileSync(abs, next);
+  if (JSON_OUT) console.log(JSON.stringify({ ok: true, file: display, parts: names }));
+  else console.log(`ok: ${display}: ${names.join(", ")}`);
 }
 
 function cmdEmit([file]) {

@@ -52,6 +52,16 @@ export function lex(src, file = "<input>", base = { line: 1, col: 1, pos: 0 }) {
       continue;
     }
 
+    // ".5" is a number unless it follows a value (then "." is member access, which never takes digits)
+    const prev = toks[toks.length - 1];
+    const afterValue = prev && (prev.t === "id" || prev.t === "num" || prev.t === "str" || (prev.t === "op" && (prev.v === ")" || prev.v === "]" || prev.v === "}")));
+    if (c === "." && isDigit(src[i + 1] ?? "") && src[i - 1] !== "." && !afterValue) {
+      adv();
+      while (i < src.length && (isDigit(src[i]) || src[i] === "_")) adv();
+      push("num", `0${src.slice(s, i).replace(/_/g, "")}`, l, cl, s);
+      continue;
+    }
+
     if (isDigit(c)) {
       let raw;
       if (c === "0" && (src[i + 1] === "x" || src[i + 1] === "b" || src[i + 1] === "o")) {

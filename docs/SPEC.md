@@ -19,7 +19,7 @@ Read this whole file once; it is the complete language.
 
 - Comment: `#` to end of line.
 - Names: `[A-Za-z_][A-Za-z0-9_]*`. JS reserved words are allowed as names (they are renamed internally).
-- Numbers: `42` `3.14` `1_000_000` `0xff` `0b1010` `1e9`. All numbers are JS doubles.
+- Numbers: `42` `3.14` `.5` `1_000_000` `0xff` `0b1010` `1e9`. All numbers are JS doubles.
 - Strings: `"..."` only (may span lines). Escapes: `\n \t \r \0 \\ \" \{ \} \u{1F600}`.
 - Keywords: `fn ret if else for in while break continue match try catch throw use as pub test new await true false nil`
 - A newline does NOT end a statement inside `( )` or `[ ]`, after a binary operator, or when the next line starts with `.` `?.` `|>` `&&` `||` `??` `else` `catch`.
@@ -52,7 +52,7 @@ Truthiness is JS truthiness (`0`, `""`, `nil`, `false`, `NaN` are falsy). Traili
 *  /  //  %         // is floor division
 **                  power (right assoc): -2 ** 2 is -4
 -x  !x  await x     unary
-f(x)  a[i]  a.b  a?.b   postfix
+f(x)  a[i]  a.b  a?.b  a?.[i]  f?.(x)   postfix (?. gives nil instead of an error when the left side is nil)
 ```
 
 Assignment operators (statements only, never inside expressions): `:=  =  +=  -=  *=  /=`
@@ -186,17 +186,31 @@ serve({
   "/api/user/:id": fn(req) {id: req.params.id},   # object/list -> JSON
   "POST /api/save": fn(req) { save(req.body); {ok: true} },  # JSON body parsed
   "/old": fn(req) redirect("/"),
+  "POST /login": fn(req) {                        # HTML forms arrive as objects too
+    user := check(req.body.name, req.body.password)
+    if user == nil { ret page({title: "Login", body: h.p("Falsches Passwort")}) }
+    redirect("/", {cookies: {sid: newSession(user)}})   # 303; cookie defaults: Path=/, HttpOnly, SameSite=Lax
+  },
+  "/me": fn(req) {sid: req.cookies.sid},
+  "/files/*": fn(req) req.params["*"],            # trailing * = rest of the path
+  "*": fn(req) reply(404, page({title: "404", body: h.h1("Nicht gefunden")})),   # catch-all, tried last
 }, {port: 8080, static: "{here}/public"})        # static: images etc.
 ```
 
 - `h.<tag>(attrs?, ...children)`: first arg is attributes if it is an object. Text children are escaped.
   Attribute `true` renders bare (`hidden`), `nil`/`false` omits it, `style` may be an object.
-- `css(obj)`: selectors -> property objects (camelCase or quoted names). Nested keys: `"&:hover"` (same element), `".child"` (descendant), `"@media ..."`.
+- `css(a, b, ...)`: several objects are rendered in order. Selectors -> property objects (camelCase or quoted names). Nested keys: `"&:hover"` (same element), `".child"` (descendant), `"@media ..."`.
 - `page({title, css, body, head?, lang?, bodyAttrs?})` returns the full document.
-- Handler gets `req` = `{method, path, params, query, headers, body}`; may be async. Return a string/`h.*` (HTML), object/list (JSON),
-  `reply(status, body, contentType?, headers?)` or `redirect(url)`. Route keys: `"/path"` (any method) or `"POST /path"`; first match wins.
+- Handler gets `req` = `{method, path, params, query, headers, cookies, body}`; may be async. `body`: JSON and urlencoded forms are objects.
+  Return a string/`h.*` (HTML), object/list (JSON), `reply(status, body, {type, headers, cookies})` or `redirect(url, {status, cookies})` (default 303).
+  Cookies: `{name: "value"}`, `{name: {value, maxAge, path, httpOnly, sameSite, secure}}`, `{name: nil}` deletes.
+  Route keys: `"GET /path"`, `"POST /path"` or `"/path"` (any method); `:name` params; trailing `*`; `"*"` alone = 404 page.
+  Order: exact routes (first match wins), static files, `*` routes, built-in 404.
 - Browser code (`app.aln`): normal Alien with `document`, `window`, `fetch`, `localStorage`; render with `use "alien:html" {h}` and
-  `el.innerHTML = h.p("x").__html`. It may `use` other .aln files in its folder. Node-only functions (`read`, `sh`) do not work there.
+  `el.innerHTML = h.p("x").__html`. It may `use` any browser-safe .aln file (also `../lib/x.aln`); only imported files are served.
+  Node-only functions (`read`, `sh`) do not work there. Pass server data with `h.json("data", value)` in the page and
+  `json(document.getElementById("data").textContent)` in the browser (safe against `</script>` in user text).
+  `h.script`/`h.style` children are NOT escaped: never put user text into them.
 - Compile errors in browser code appear in the browser console and the server log.
 
 ## JS interop
@@ -211,7 +225,7 @@ serve({
 Collection functions take the collection first, so they chain with `|>`. They never mutate, except `push`/`pop`.
 
 ```
-print(...xs)            str(x)              repr(x) (quoted strings)   type(x)    len(x)
+print(...xs)            str(x) (objects with own toString, e.g. URL, use it)   repr(x) (debug form)   type(x)    len(x)
 num(x) -> num|nil (trims; ""/nil/bad -> nil)   int(x) -> num|nil (truncates: int("3.7") is 3)   eq(a, b) deep equality    assert(cond, msg?)
 range(n) range(a, b, step?)                 map(xs, fn(x, i))         filter(xs, fn(x, i))
 reduce(xs, fn(acc, x), init?)               each(xs, fn(x, i))        find(xs, f) -> x|nil
@@ -221,7 +235,7 @@ rev(xs|str)   uniq(xs)   flat(xs, depth=1)   zip(a, b, ...)   indexed(xs) -> [[i
 take(xs, n)   drop(xs, n)   first(xs)   last(xs)   push(xs, ...v) -> xs   pop(xs)
 slice(x, a, b?)   join(xs, sep="")   group(xs, keyFn) -> {key: [x]}   tally(xs, keyFn?) -> {key: count}   chunk(xs, n)
 keys(o)  vals(o)  entries(o)  has(coll, x) (list item / substring / object key / Map key)
-get(o, k, default=nil)   merge(...objs)   copy(x) (deep clone)
+get(o, k, default=nil)   merge(...objs)   copy(x) (deep clone)   del(o, ...keys) -> o (removes keys)
 split(s, sep="")  lines(s)  trim(s)  upper(s)  lower(s)  replace(s, a, b) (all)  starts(s, p)  ends(s, p)  chars(s)
 abs floor ceil sqrt   round(x, digits=0)   rand() -> [0,1)   randint(a, b) inclusive
 json(s) parse    tojson(x, pretty=false)
@@ -241,7 +255,8 @@ alien map path                alien show file name...    alien put file name [--
 **Big files: never read the whole file.** `alien map f.aln` lists every top-level part (fn, value, statement)
 with lines, size (~tokens), `uses:` and `by:` (dependencies). Then `alien show f.aln home card` prints only those
 parts, and `alien put f.aln card --code "fn card(x) ..."` replaces one part by name (or stdin; a new name appends,
-`--delete` removes). `put` only writes if the whole file still compiles, otherwise it prints the errors and changes nothing.
+`--delete` removes). `alien put f.aln --code "..."` without a name replaces every part contained in the code at once
+(for changes that touch several parts). `put` also repairs a file that no longer parses. `put` only writes if the whole file still compiles, otherwise it prints the errors and changes nothing.
 Leading `#` comment lines belong to the part below them and appear in the map, so document parts that way.
 
 `--json` gives one JSON object on stdout: `{"ok": false, "errors": [{"code", "msg", "file", "line", "col", "hint"}]}`.

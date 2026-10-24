@@ -22,3 +22,6 @@ print("hi".toUpperCase(), Math.max(1, 5), [1, 2, 3].includes(2))
 print(min([4, 2, 8]), max(4, 9), sum([1, 2, 3]), sum([{v: 2}, {v: 3}], fn(o) o.v))
 print(tojson({a: [1, nil]}), json("\{\"b\": 2\}").b)
 print([1, 2, 3, 4] |> filter(fn(x) x > 1) |> map(fn(x) x * 10) |> join(_, "+"))
+# v0.5: .5 numbers, optional index/call, del, toString in strings
+none := nil
+print(.5 + .25, none?.[0], none?.(1), [7]?.[0], del({a: 1, b: 2}, "a"), "{new URLSearchParams({q: "a b"})}")

@@ -5,6 +5,8 @@
 // displayFile: path used in diagnostics
 // runtimeUrl:  module specifier the generated code imports the runtime from
 // alnExt:      rewrite `use "x.aln"` to this extension (".mjs" for `alien build`)
+// alnSpec:     fn(path) -> specifier for `use "x.aln"` (overrides alnExt)
+// stdSpec:     fn(name) -> specifier for `use "alien:name"`
 // printLast:   print the value of the last top-level expression (`alien eval`)
 
 import { parse } from "./parser.js";
