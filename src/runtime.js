@@ -3,8 +3,9 @@
 // Adding a prelude function: export it here (src/prelude.js picks it up automatically),
 // document it in docs/SPEC.md and add a test in tests/.
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { execSync } from "node:child_process";
+// No static node: imports, so this file also runs in the browser (alien:web client code).
+// Node-only prelude functions load their builtin on first use.
+const node = (m) => globalThis.process?.getBuiltinModule?.(m) ?? (() => { throw new Error(`'${m}' is not available here (browser?)`); })();
 
 // ---------- internals ----------
 
@@ -20,6 +21,12 @@ export function err(x) {
   const e = new Error(typeof x === "string" ? x : repr(x));
   e.data = x;
   return e;
+}
+
+// `here`: directory of the current .aln file
+export function dirOf(url) {
+  const p = decodeURIComponent(new URL(url).pathname);
+  return (/^\/[A-Za-z]:/.test(p) ? p.slice(1) : p).replace(/\/[^/]*$/, "");
 }
 
 export function noMatch(v, loc) { return new Error(`no match arm for value ${repr(v)} (${loc})`); }
@@ -202,14 +209,14 @@ export function randint(a, b) { return a + Math.floor(Math.random() * (b - a + 1
 
 export function json(s) { return JSON.parse(s); }
 export function tojson(x, pretty = false) { return JSON.stringify(x, null, pretty ? 2 : undefined); }
-export function read(path) { return readFileSync(path, "utf8"); }
-export function write(path, s) { writeFileSync(path, typeof s === "string" ? s : str(s)); return null; }
-export function exists(path) { return existsSync(path); }
-export function sh(cmd) { return execSync(cmd, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).replace(/\r?\n$/, ""); }
+export function read(path) { return node("node:fs").readFileSync(path, "utf8"); }
+export function write(path, s) { node("node:fs").writeFileSync(path, typeof s === "string" ? s : str(s)); return null; }
+export function exists(path) { return node("node:fs").existsSync(path); }
+export function sh(cmd) { return node("node:child_process").execSync(cmd, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).replace(/\r?\n$/, ""); }
 export function env(name, d = null) { return process.env[name] ?? d; }
 export function exit(code = 0) { process.exit(code); }
 export function now() { return Date.now(); }
 export function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 // live binding: the CLI calls setArgs() before running a program; built .mjs files keep argv
-export let args = process.argv.slice(2);
+export let args = globalThis.process?.argv?.slice(2) ?? [];
 export function setArgs(a) { args = a; }

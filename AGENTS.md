@@ -25,6 +25,7 @@ src/codegen.js   AST -> JS + source map; name resolution and compile-time checks
 src/runtime.js   prelude functions + internal helpers ($rt.*) used by generated code
 src/prelude.js   prelude name list (derived from runtime.js exports)
 src/compile.js   public API: compile(src, opts) -> {code, deps}
+std/*.aln        standard library, written in Alien (`use "alien:web"`); keep it Alien, not JS
 bin/alien.js     CLI, module loader hook (.aln imports), test runner, error formatting
 tests/run.js     test suite (cases/, errors/, unit/, examples/)
 docs/            SPEC (language), ERRORS (codes), ROADMAP (what to do next)

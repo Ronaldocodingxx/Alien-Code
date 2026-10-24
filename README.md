@@ -27,6 +27,21 @@ alien run examples/hello.aln
 
 Ohne `npm link` geht alles auch mit `node bin/alien.js ...`.
 
+## Websites komplett in Alien
+
+HTML, CSS, Server und Browser-Code – alles `.aln`, keine einzige `.html`/`.css`/`.js`-Datei:
+
+```
+use "alien:web" {serve, h, css, page, client}
+
+STYLE := css({"h1": {color: "#5cff9d"}})
+
+serve({
+  "/": fn(req) page({title: "Hallo", css: STYLE, body: [h.h1("Hallo Welt"), client("{here}/app.aln")]}),
+  "/api/zeit": fn(req) {jetzt: now()},
+})
+```
+
 ## Befehle
 
 | Befehl | Was es tut |

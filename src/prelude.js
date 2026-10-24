@@ -3,5 +3,5 @@
 
 import * as RT from "./runtime.js";
 
-export const INTERNAL = new Set(["tests", "test", "AssertError", "err", "noMatch", "show", "assertEq", "setArgs"]);
+export const INTERNAL = new Set(["tests", "test", "AssertError", "err", "noMatch", "show", "assertEq", "setArgs", "dirOf"]);
 export const PRELUDE = new Set(Object.keys(RT).filter((k) => !INTERNAL.has(k)));

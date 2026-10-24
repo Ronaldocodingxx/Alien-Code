@@ -29,6 +29,9 @@ const JS_GLOBALS = new Set([
   "setTimeout", "clearTimeout", "setInterval", "clearInterval", "setImmediate", "queueMicrotask",
   "structuredClone", "crypto", "performance", "parseInt", "parseFloat", "isNaN", "isFinite",
   "encodeURIComponent", "decodeURIComponent", "atob", "btoa", "WebSocket", "Infinity", "NaN",
+  // browser (alien:web client code)
+  "document", "window", "location", "history", "navigator", "localStorage", "sessionStorage", "alert",
+  "confirm", "requestAnimationFrame", "Event", "CustomEvent", "EventSource", "HTMLElement", "Image",
 ]);
 
 const CONTROL = new Set(["If", "Match", "Try"]);
@@ -173,6 +176,7 @@ class Gen {
     if (scope.has(n)) return mangle(n);
     if (PRELUDE.has(n)) { this.prelude.add(n); return `$${n}`; }
     if (n === "js") return "globalThis";
+    if (n === "here") return "$rt.dirOf(import.meta.url)";
     if (JS_GLOBALS.has(n)) return n;
     const s = suggest(n, [...scope.all(), ...PRELUDE, ...JS_GLOBALS]);
     throw this.err("E020", `unknown name '${n}'`, node, s ? `did you mean '${s}'?` : `declare it with ${n} := ...  (other JS globals: js.${n})`);
@@ -200,9 +204,12 @@ class Gen {
   }
 
   use(s, scope) {
-    const aln = s.path.endsWith(".aln");
-    if (aln) this.deps.push({ path: s.path, line: s.line, col: s.col });
-    const spec = JSON.stringify(aln && this.o.alnExt ? s.path.slice(0, -4) + this.o.alnExt : s.path);
+    // "alien:name" = standard library module std/name.aln; the CLI decides its real location
+    const std = s.path.startsWith("alien:") ? s.path.slice(6) : null;
+    const aln = std !== null || s.path.endsWith(".aln");
+    if (aln) this.deps.push({ path: s.path, std, line: s.line, col: s.col });
+    if (std !== null && !this.o.stdSpec) throw this.err("E050", `standard module '${s.path}' is not available here`, s);
+    const spec = JSON.stringify(std !== null ? this.o.stdSpec(std) : aln && this.o.alnExt ? s.path.slice(0, -4) + this.o.alnExt : s.path);
     if (s.alias) {
       this.declare(s.alias, scope, s);
       const a = mangle(s.alias);

@@ -1,0 +1,30 @@
+use "alien:web" {serve, h, css, page, client, reply, redirect}
+
+STYLE := css({".x": {color: "red"}})
+server := serve({
+  "/": fn(req) page({title: "Home", css: STYLE, body: [h.h1("Hi"), client("{here}/web/app.aln")]}),
+  "/api/user/:id": fn(req) {id: req.params.id, q: req.query.q},
+  "POST /api/echo": fn(req) req.body,
+  "/old": fn(req) redirect("/"),
+  "/teapot": fn(req) reply(418, "short and stout", "text/plain"),
+  "/async": fn(req) { await sleep(1); "done" },
+}, {port: 0, quiet: true})
+await new Promise(fn(ok) server.once("listening", ok))
+base := "http://localhost:{server.address().port}"
+
+home := await (await fetch(base)).text()
+print(has(home, "<h1>Hi</h1>"), has(home, ".x \{ color: red; \}"), has(home, "src=\"/_alien/c/0/app.aln\""))
+print(await (await fetch("{base}/api/user/42?q=z")).json())
+print(await (await fetch("{base}/api/echo", {method: "POST", body: tojson({a: 1})})).json())
+r := await fetch("{base}/old", {redirect: "manual"})
+print(r.status, r.headers.get("location"))
+t := await fetch("{base}/teapot")
+print(t.status, await t.text())
+print(await (await fetch("{base}/async")).text())
+print((await fetch("{base}/nope")).status)
+js1 := await (await fetch("{base}/_alien/c/0/app.aln")).text()
+print(has(js1, "/_alien/std/html.aln"), has(js1, "./util.aln"))
+print((await fetch("{base}/_alien/c/0/util.aln")).status, (await fetch("{base}/_alien/c/0/../web.aln")).status)
+print(has(await (await fetch("{base}/_alien/std/html.aln")).text(), "export"))
+print(has(await (await fetch("{base}/_alien/rt.js")).text(), "export function print"))
+server.close()

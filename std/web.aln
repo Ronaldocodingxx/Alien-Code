@@ -1,0 +1,168 @@
+# alien:web — websites in pure Alien: server, routes, pages, CSS and browser code.
+#   use "alien:web" {serve, h, css, page, client}
+#   serve({
+#     "/": fn(req) page({title: "Hi", css: STYLE, body: [h.h1("Hello"), client("{here}/app.aln")]}),
+#     "/api/user/:id": fn(req) {id: req.params.id},     # objects/lists -> JSON
+#     "POST /api/echo": fn(req) req.body,                 # JSON bodies are parsed
+#   }, {port: 8080, static: "{here}/public"})
+# Handler results: string or h.* -> HTML; object/list -> JSON; reply(status, body) / redirect(url) for control.
+# client(file) compiles that .aln file for the browser and returns the <script> tag that loads it.
+
+use "node:http" as http
+use "node:fs" as fs
+use "node:path" as path
+use "../src/compile.js" {compile}
+use "alien:html" as html
+
+pub h := html.h
+pub css := html.css
+pub page := html.page
+pub raw := html.raw
+pub esc := html.esc
+pub el := html.el
+
+HTML := "text/html; charset=utf-8"
+JS := "text/javascript; charset=utf-8"
+MIME := {
+  ".html": HTML, ".css": "text/css; charset=utf-8", ".js": JS, ".mjs": JS,
+  ".json": "application/json; charset=utf-8", ".txt": "text/plain; charset=utf-8",
+  ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+  ".gif": "image/gif", ".webp": "image/webp", ".ico": "image/x-icon", ".woff2": "font/woff2",
+  ".mp4": "video/mp4", ".mp3": "audio/mpeg", ".pdf": "application/pdf",
+}
+
+pub fn reply(status, body, ctype = nil, headers = {}) {__reply: true, status, body, ctype, headers}
+pub fn redirect(to) reply(302, "", nil, {Location: to})
+
+fn send(res, status, ctype, body, headers = {}) {
+  res.writeHead(status, {"Content-Type": ctype, ...headers})
+  res.end(body)
+}
+
+fn guess(x) if type(x) == "str" || html.isRaw(x) { HTML } else { MIME[".json"] }
+fn bodyOf(x) if type(x) == "str" { x } else if html.isRaw(x) { x.__html } else { tojson(x) }
+
+fn respond(res, out) {
+  if out != nil && out.__reply == true {
+    ret send(res, out.status, out.ctype ?? guess(out.body), bodyOf(out.body), out.headers)
+  }
+  send(res, 200, guess(out), bodyOf(out))
+}
+
+fn readBody(req) new Promise(fn(done) {
+  chunks := []
+  req.on("data", fn(c) push(chunks, c))
+  req.on("end", fn() {
+    text := Buffer.concat(chunks).toString()
+    done(if text == "" { nil } else { try { json(text) } catch { text } })
+  })
+})
+
+# "/user/:id" matches "/user/7" -> {id: "7"}
+fn matchPath(pat, p) {
+  a := split(pat, "/")
+  b := split(p, "/")
+  if len(a) != len(b) { ret nil }
+  params := {}
+  for i in 0..len(a) {
+    if starts(a[i], ":") { params[slice(a[i], 1)] = decodeURIComponent(b[i]) }
+    else if a[i] != b[i] { ret nil }
+  }
+  params
+}
+
+fn findRoute(routes, method, p) {
+  for [key, f] in entries(routes) {
+    parts := split(key, " ")
+    [m, pat] := if len(parts) == 2 { parts } else { [nil, key] }
+    if m != nil && m != method { continue }
+    params := matchPath(pat, p)
+    if params != nil { ret [f, params] }
+  }
+  nil
+}
+
+# ---------- browser code ----------
+
+roots := []            # directories of client entry files; URL /_alien/c/<i>/<file>
+allowed := new Set()   # absolute .aln paths the browser may load (entries + their imports)
+
+pub fn client(file) {
+  abs := path.resolve(file)
+  dir := path.dirname(abs)
+  i := index(roots, dir)
+  if i == nil {
+    push(roots, dir)
+    i = len(roots) - 1
+  }
+  allowed.add(abs)
+  raw("<script type=\"module\" src=\"/_alien/c/{i}/{path.basename(abs)}\"></script>")
+}
+
+fn browserJs(file, urlPath) {
+  r := compile(fs.readFileSync(file, "utf8"), {
+    displayFile: path.basename(file),
+    runtimeUrl: "/_alien/rt.js",
+    stdSpec: fn(n) "/_alien/std/{n}.aln",
+    sourceUrl: urlPath,
+  })
+  for d in r.deps {
+    if d.std == nil { allowed.add(path.resolve(path.dirname(file), d.path)) }
+  }
+  r.code
+}
+
+fn serveAlien(res, p) {
+  if p == "/_alien/rt.js" { ret send(res, 200, JS, fs.readFileSync(path.join(here, "../src/runtime.js"))) }
+  file := match p.match(js.RegExp("^/_alien/(std|c)/(?:(\\d+)/)?(.+)$")) {
+    [_, "std", _, name] => path.join(here, path.basename(name))
+    [_, "c", i, rel] => path.join(roots[int(i)] ?? "/nonexistent", decodeURIComponent(rel))
+    _ => nil
+  }
+  isStd := file != nil && path.dirname(file) == path.resolve(here)
+  if file == nil || (!isStd && !allowed.has(file)) || !exists(file) { ret send(res, 404, JS, "// not found") }
+  code := try { browserJs(file, p) } catch e {
+    print(e.message)
+    "console.error({tojson("Alien compile error in " + p + ": " + e.message)})"
+  }
+  send(res, 200, JS, code)
+}
+
+# ---------- server ----------
+
+fn handle(routes, dir, req, res) {
+  u := new URL(req.url, "http://localhost")
+  p := u.pathname
+  if starts(p, "/_alien/") { ret serveAlien(res, p) }
+  found := findRoute(routes, req.method, p)
+  if found != nil {
+    [f, params] := found
+    body := await readBody(req)
+    r := {method: req.method, path: p, params, query: Object.fromEntries(u.searchParams), headers: req.headers, body, req, res}
+    out := await f(r)
+    if !res.writableEnded { respond(res, out) }
+    ret nil
+  }
+  if dir != nil {
+    root := path.resolve(dir)
+    file := path.join(root, path.normalize(decodeURIComponent(if p == "/" { "/index.html" } else { p })))
+    if starts(file, root) && exists(file) && fs.statSync(file).isFile() {
+      ret send(res, 200, MIME[lower(path.extname(file))] ?? "application/octet-stream", fs.readFileSync(file))
+    }
+  }
+  send(res, 404, HTML, "<h1>404 Not Found</h1>")
+}
+
+pub fn serve(routes, opts = {}) {
+  port := opts.port ?? int(env("PORT")) ?? 8080
+  server := http.createServer(fn(req, res) {
+    handle(routes, opts.static, req, res).catch(fn(e) {
+      print("error in {req.method} {req.url}: {e.stack}")
+      if !res.headersSent { send(res, 500, HTML, "<h1>500 Internal Server Error</h1>") }
+    })
+  })
+  server.listen(port, fn() {
+    if !opts.quiet { print("👽 Server läuft: http://localhost:{server.address().port}") }
+  })
+  server
+}

@@ -140,6 +140,8 @@ pub VERSION := "1.0"              # export a value
 ```
 
 `use` and `pub` only at top level. Paths are relative to the importing file.
+`here` is the directory of the current file: `read("{here}/data.txt")` works from any working directory.
+Standard library modules: `use "alien:web" {...}` (web) and `use "alien:html" {...}` (HTML/CSS only, browser-safe).
 Top-level code of a module runs when it is first imported.
 
 ## Tests
@@ -153,6 +155,41 @@ test "adds numbers" {
 
 `alien test` runs all `test` blocks (in a directory: files named `*_test.aln` or containing tests).
 Tests are ignored by `alien run`. Test bodies may use `await`.
+
+## Websites (alien:web) — write HTML, CSS and browser code in Alien, never in .html/.css/.js files
+
+```
+use "alien:web" {serve, h, css, page, client, reply, redirect}
+
+STYLE := css({
+  ":root": {"--accent": "#5cff9d"},
+  ".card": {padding: "28px", borderRadius: "18px", "&:hover": {transform: "translateY(-4px)"}, "h3": {margin: 0}},
+  "@media (max-width: 560px)": {".card": {padding: "16px"}},
+})
+
+fn card(title, text) h.article({class: "card"}, h.h3(title), h.p(text))
+
+serve({
+  "/": fn(req) page({title: "Home", lang: "de", css: STYLE, body: [
+    h.h1("Hello"),
+    map(items, fn(it) card(it.title, it.text)),   # lists are flattened, nil/false render nothing
+    client("{here}/app.aln"),                      # browser code, compiled automatically
+  ]}),
+  "/api/user/:id": fn(req) {id: req.params.id},   # object/list -> JSON
+  "POST /api/save": fn(req) { save(req.body); {ok: true} },  # JSON body parsed
+  "/old": fn(req) redirect("/"),
+}, {port: 8080, static: "{here}/public"})        # static: images etc.
+```
+
+- `h.<tag>(attrs?, ...children)`: first arg is attributes if it is an object. Text children are escaped.
+  Attribute `true` renders bare (`hidden`), `nil`/`false` omits it, `style` may be an object.
+- `css(obj)`: selectors -> property objects (camelCase or quoted names). Nested keys: `"&:hover"` (same element), `".child"` (descendant), `"@media ..."`.
+- `page({title, css, body, head?, lang?, bodyAttrs?})` returns the full document.
+- Handler gets `req` = `{method, path, params, query, headers, body}`; may be async. Return a string/`h.*` (HTML), object/list (JSON),
+  `reply(status, body, contentType?, headers?)` or `redirect(url)`. Route keys: `"/path"` (any method) or `"POST /path"`; first match wins.
+- Browser code (`app.aln`): normal Alien with `document`, `window`, `fetch`, `localStorage`; render with `use "alien:html" {h}` and
+  `el.innerHTML = h.p("x").__html`. It may `use` other .aln files in its folder. Node-only functions (`read`, `sh`) do not work there.
+- Compile errors in browser code appear in the browser console and the server log.
 
 ## JS interop
 

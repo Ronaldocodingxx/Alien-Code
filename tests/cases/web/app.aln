@@ -1,0 +1,4 @@
+# browser code used by tests/cases/web.aln
+use "alien:html" {h}
+use "./util.aln" {greet}
+document.body.innerHTML += h.p(greet("browser")).__html

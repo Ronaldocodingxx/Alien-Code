@@ -1,0 +1,79 @@
+# alien:html — build HTML and CSS from Alien values. Pure: runs on the server and in the browser.
+#   h.div({class: "card"}, h.h2("Title"), "text is escaped", [lists, are, flattened], nil)
+#   css({".card": {padding: "28px", "&:hover": {color: "red"}}, "@media (max-width: 560px)": {...}})
+#   page({title, css, body, head, lang, bodyAttrs})  -> complete HTML document string
+
+VOID := ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]
+RAWTEXT := ["script", "style"]
+TAGS := [
+  "html", "head", "body", "title", "meta", "link", "script", "style", "base", "noscript", "template",
+  "main", "header", "footer", "nav", "section", "article", "aside", "div", "span", "p", "a", "br", "hr",
+  "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "dl", "dt", "dd", "strong", "em", "b", "i", "u",
+  "small", "mark", "code", "pre", "kbd", "blockquote", "q", "cite", "abbr", "time", "sub", "sup",
+  "img", "picture", "source", "video", "audio", "track", "canvas", "svg", "path", "circle", "rect", "g",
+  "iframe", "embed", "object", "figure", "figcaption", "table", "caption", "thead", "tbody", "tfoot",
+  "tr", "th", "td", "col", "colgroup", "form", "label", "input", "textarea", "select", "option",
+  "optgroup", "button", "fieldset", "legend", "output", "progress", "meter", "details", "summary", "dialog",
+  "area", "map", "wbr",
+]
+
+# already-rendered HTML that must not be escaped again
+pub fn raw(s) {__html: str(s)}
+pub fn isRaw(x) type(x) == "obj" && type(x.__html) == "str"
+
+pub fn esc(s) str(s)
+  .replaceAll("&", "&amp;")
+  .replaceAll("<", "&lt;")
+  .replaceAll(">", "&gt;")
+  .replaceAll("\"", "&quot;")
+
+fn kebab(k) k.replace(js.RegExp("[A-Z]", "g"), fn(m) "-" + lower(m))
+
+fn decls(o) entries(o) |> map(fn([k, v]) "{kebab(k)}: {v};") |> join(" ")
+
+fn kids(list, rawText) flat(list, Infinity)
+  |> map(fn(k) if k == nil || k == false || k == true { "" } else if isRaw(k) { k.__html } else if rawText { str(k) } else { esc(k) })
+  |> join
+
+fn attrs(a) entries(a) |> map(fn([k, v]) match v {
+  nil | false => ""
+  true => " {k}"
+  _ => if k == "style" && type(v) == "obj" { " style=\"{esc(decls(v))}\"" } else { " {k}=\"{esc(v)}\"" }
+}) |> join
+
+# el("div", {attrs}?, ...children) -> raw HTML. Usually called through h.div(...) etc.
+pub fn el(tag, ...args) {
+  hasAttrs := len(args) > 0 && type(args[0]) == "obj" && !isRaw(args[0])
+  a := if hasAttrs { args[0] } else { {} }
+  rest := if hasAttrs { drop(args, 1) } else { args }
+  open := "<{tag}{attrs(a)}>"
+  if has(VOID, tag) { raw(open) } else { raw("{open}{kids(rest, has(RAWTEXT, tag))}</{tag}>") }
+}
+
+# h.div, h.p, h.a, ... one function per tag; el(tag, ...) for anything else
+pub h := {}
+for t in TAGS { h[t] = fn(...args) el(t, ...args) }
+
+fn rules(o, parent) entries(o) |> map(fn([sel, body]) {
+  if starts(sel, "@") { ret "{sel} \{\n{rules(body, parent)}\n\}" }
+  full := if parent == "" { sel } else if has(sel, "&") { replace(sel, "&", parent) } else { "{parent} {sel}" }
+  props := filter(entries(body), fn([_, v]) type(v) != "obj")
+  nested := filter(entries(body), fn([_, v]) type(v) == "obj")
+  own := if len(props) > 0 { "{full} \{ {decls(Object.fromEntries(props))} \}" } else { "" }
+  join(filter([own, rules(Object.fromEntries(nested), full)], fn(s) s != ""), "\n")
+}) |> join("\n")
+
+# CSS from nested objects. Property names may be camelCase (fontSize) or quoted ("font-size", "--my-var").
+# Nested keys: "&:hover" (same element) or ".child" (descendant). "@media ..." keys wrap their rules.
+pub fn css(o) raw(rules(o, ""))
+
+pub fn page(o) {
+  head := [
+    h.meta({charset: "utf-8"}),
+    h.meta({name: "viewport", content: "width=device-width, initial-scale=1"}),
+    h.title(o.title ?? ""),
+    if o.css { h.style(o.css) },
+    o.head,
+  ]
+  "<!doctype html>\n" + h.html({lang: o.lang ?? "en"}, h.head(head), h.body(o.bodyAttrs ?? {}, o.body)).__html
+}

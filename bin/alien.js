@@ -13,6 +13,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
 const RUNTIME = join(ROOT, "src", "runtime.js");
 const RUNTIME_URL = pathToFileURL(RUNTIME).href;
+const STD = join(ROOT, "std");
+const stdSpec = (n) => pathToFileURL(join(STD, `${n}.aln`)).href;
 
 const HELP = `alien ${VERSION} - a programming language for AI agents
 
@@ -41,7 +43,7 @@ const disp = (p) => {
 function compileFile(abs, src, extra = {}) {
   const displayFile = disp(abs);
   sources.set(displayFile, src);
-  return compile(src, { displayFile, runtimeUrl: RUNTIME_URL, sourceUrl: pathToFileURL(abs).href, ...extra });
+  return compile(src, { displayFile, runtimeUrl: RUNTIME_URL, stdSpec, sourceUrl: pathToFileURL(abs).href, ...extra });
 }
 
 let hooked = false;
@@ -139,7 +141,10 @@ function compileGraph(entries, extra = {}) {
     try {
       const r = compileFile(abs, readFileSync(abs, "utf8"), extra);
       results.set(abs, r);
-      for (const d of r.deps) if (d.path.startsWith(".")) visit(resolve(dirname(abs), d.path), { ...d, file: disp(abs) });
+      for (const d of r.deps) {
+        if (d.std != null) visit(join(STD, `${d.std}.aln`), { ...d, file: disp(abs) });
+        else if (d.path.startsWith(".")) visit(resolve(dirname(abs), d.path), { ...d, file: disp(abs) });
+      }
     } catch (e) {
       if (e instanceof AlienError) errors.push(e);
       else throw e;
@@ -196,24 +201,31 @@ function cmdBuild(argv) {
   if (!files.length) throw new AlienError("E050", "missing file: alien build <file.aln> [-o dir]", "<cli>", 1, 1);
   const outDir = resolve(out);
   const base = dirname(resolve(files[0]));
-  const rtOut = join(outDir, "alien_rt.mjs");
+  // layout: <out>/<your files>.mjs, <out>/_alien/std/*.mjs (alien: modules), <out>/_alien/src/ (runtime + compiler)
+  const lib = join(outDir, "_alien");
+  const spec = (fromDir, to) => { const r = relative(fromDir, to).replace(/\\/g, "/"); return r.startsWith(".") ? r : `./${r}`; };
   const written = [];
   const { errors, results } = compileGraph(files.map((f) => resolve(f)), { alnExt: ".mjs" });
   if (errors.length) throw errors[0];
   for (const abs of results.keys()) {
-    const rel = relative(base, abs);
+    const inStd = !relative(STD, abs).startsWith("..");
+    const rel = relative(inStd ? STD : base, abs);
     if (rel.startsWith("..")) throw new AlienError("E051", `cannot build ${disp(abs)}: it is outside ${disp(base)}`, disp(abs), 1, 1);
-    const target = join(outDir, rel.replace(/\.aln$/, ".mjs"));
-    let rt = relative(dirname(target), rtOut).replace(/\\/g, "/");
-    if (!rt.startsWith(".")) rt = `./${rt}`;
-    const r = compileFile(abs, readFileSync(abs, "utf8"), { alnExt: ".mjs", runtimeUrl: rt });
-    mkdirSync(dirname(target), { recursive: true });
+    const target = join(inStd ? join(lib, "std") : outDir, rel.replace(/\.aln$/, ".mjs"));
+    const dir = dirname(target);
+    const r = compileFile(abs, readFileSync(abs, "utf8"), {
+      alnExt: ".mjs",
+      runtimeUrl: spec(dir, join(lib, "src", "runtime.js")),
+      stdSpec: (n) => spec(dir, join(lib, "std", `${n}.mjs`)),
+    });
+    mkdirSync(dir, { recursive: true });
     writeFileSync(target, r.code);
     written.push(disp(target));
   }
-  mkdirSync(outDir, { recursive: true });
-  copyFileSync(RUNTIME, rtOut);
-  written.push(disp(rtOut));
+  mkdirSync(join(lib, "src"), { recursive: true });
+  for (const f of readdirSync(join(ROOT, "src"))) copyFileSync(join(ROOT, "src", f), join(lib, "src", f));
+  writeFileSync(join(lib, "package.json"), JSON.stringify({ type: "module" }));
+  written.push(disp(join(lib, "src")) + "/ (runtime)");
   if (JSON_OUT) console.log(JSON.stringify({ ok: true, files: written }));
   else console.log(`built:\n  ${written.join("\n  ")}\nrun with: node ${written[0]}`);
 }

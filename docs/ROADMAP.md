@@ -16,7 +16,7 @@ remove it here when done and add anything new you discover. Keep each item one l
    so an agent can learn a module's API without reading its source.
 7. **Optional index with `?.[i]`** and optional calls `f?.()`.
 8. **String patterns in match** with prefix: `"cmd:" ++ rest =>`; and range patterns `1..10 =>`.
-9. **Browser build target** — `alien build --target web` (runtime without node:fs / child_process).
+9. **Static site export** — `alien build` for alien:web sites: pre-render pages + client code to plain files for any static host.
 10. **Package manager story** — `use "npm:pkg"` resolving via the project's node_modules, `alien new`.
 11. **Self-hosting** — rewrite the compiler in Alien once the language is stable enough.
 
@@ -31,5 +31,6 @@ remove it here when done and add anything new you discover. Keep each item one l
 
 ## Done
 
+- v0.2.0: `alien:web` / `alien:html` (websites in pure Alien, browser code via `client`), `here`.
 - v0.1.0: lexer, parser, JS codegen with source maps, compile-time name checks, match, pipes,
   modules + JS interop, async, test blocks, `run/eval/test/check/emit/build/spec` CLI with `--json`.
