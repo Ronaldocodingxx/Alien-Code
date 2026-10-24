@@ -1,0 +1,4 @@
+# helper module used by tests/cases/modules.aln
+pub fn square(x) x * x
+pub PI := 3.14
+fn hidden() 1

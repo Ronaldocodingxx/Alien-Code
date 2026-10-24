@@ -1,0 +1,7 @@
+use "./lib/math.aln" as m
+use "./lib/math.aln" {square, PI as pi}
+use "node:path" as path
+use "node:os" {EOL}
+print(m.square(4), square(3), pi)
+print(path.basename("/a/b/c.txt"))
+print(len(EOL) > 0)

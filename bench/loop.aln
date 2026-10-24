@@ -1,0 +1,6 @@
+t := now()
+acc := 0
+for i in 0..50_000_000 {
+  if i % 3 == 0 { acc += i }
+}
+print("alien loop 50M = {acc} in {now() - t}ms")

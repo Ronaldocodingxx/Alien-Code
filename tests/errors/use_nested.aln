@@ -1,0 +1,4 @@
+# expect: E011
+fn f() {
+  use "node:fs" as fs
+}

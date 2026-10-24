@@ -1,0 +1,23 @@
+# loops, break/continue, while, ranges
+out := []
+for i in 0..10 {
+  if i == 2 { continue }
+  if i == 6 { break }
+  push(out, i)
+}
+print(out)
+for i in 1..=3 { print("i={i}") }
+n := 0
+while n < 5 { n += 1 }
+print(n)
+for [i, x] in indexed(["a", "b"]) { print(i, x) }
+for [k, v] in entries({x: 1, y: 2}) { print(k, v) }
+print(0..5, 3..=5)
+grade := fn(s) if s >= 90 { "A" } else if s >= 80 { "B" } else { "C" }
+print(map([95, 85, 10], grade))
+# if as value inside an expression -> ternary/iife
+print("x" + if n > 3 { "big" } else { "small" })
+label := match n { 5 => "five", _ => "?" }
+print(label)
+v := try { throw "boom" } catch e { "caught: {e.message}" }
+print(v)

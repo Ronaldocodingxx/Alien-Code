@@ -1,0 +1,2 @@
+Alien ist eine Sprache für Agenten. Agenten lieben klare Sprache.
+Klare Regeln, klare Fehler!

@@ -1,0 +1,21 @@
+# examples copied from docs/SPEC.md must keep working
+write("_words.tmp", "the cat the dog The end")
+counts := read("_words.tmp") |> lower |> split(" ") |> filter(fn(w) w != "") |> group(fn(w) w)
+top := entries(counts) |> map(fn([w, ws]) [w, len(ws)]) |> sort(fn(p) -p[1]) |> take(3)
+print(top)
+sh("node -e \"require('fs').unlinkSync('_words.tmp')\"")
+port := int(env("ALIEN_SPEC_PORT_UNSET")) ?? 8080
+print(port)
+fn parse(s) try { {ok: true, v: json(s)} } catch e { {ok: false, err: e.message} }
+print(parse("[1]"), parse("x").ok)
+fn first([h, ..._t]) h
+fn total(...nums) sum(nums)
+print(first([7, 8]), total(1, 2, 3))
+r := try { throw "x" } catch { "no name" }
+print(r)
+fn find2(xs, t) {
+  for x in xs { if x == t { ret x } }
+  nil
+}
+print(find2([{a: 1}], {a: 1}))
+print(num(nil), num(true), num(" 5 "), int(nil))

@@ -1,0 +1,3 @@
+# expect: E010
+if true {
+  print(1)

@@ -1,0 +1,22 @@
+# usage: alien run examples/wordcount.aln <file> [top=5]
+if len(args) < 1 {
+  print("usage: alien run examples/wordcount.aln <file> [top]")
+  exit(1)
+}
+[path, n] := args
+top := int(n) ?? 5
+
+words := read(path)
+  |> lower
+  |> split(js.RegExp("\\s+"))
+  |> map(fn(w) w.replace(js.RegExp("[^a-zäöüß0-9]", "g"), ""))
+  |> filter(fn(w) w != "")
+
+counts := group(words, fn(w) w)
+ranked := entries(counts)
+  |> map(fn([w, ws]) {word: w, n: len(ws)})
+  |> sort(fn(e) -e.n)
+  |> take(top)
+
+print("{len(words)} words, {len(counts)} unique")
+for {word, n} in ranked { print("{n}\t{word}") }

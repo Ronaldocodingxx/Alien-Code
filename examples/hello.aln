@@ -1,0 +1,26 @@
+# Alien basics
+name := "Welt"
+print("Hallo {name}!")
+
+fn fib(n) if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+print(fib(20))
+
+xs := [1, 2, 3, 4, 5]
+total := xs
+  |> filter(fn(x) x % 2 == 1)
+  |> map(fn(x) x * 10)
+  |> sum
+print("total = {total}")
+
+fn describe(v) match v {
+  0 => "zero"
+  [a, b] => "pair {a},{b}"
+  {name} => "named {name}"
+  n if n > 100 => "big"
+  _ => "other {v}"
+}
+for v in [0, [1, 2], {name: "bob"}, 500, 7] { print(describe(v)) }
+
+user := {name: "ada", age: 36}
+{name: n, age} := user
+print(n, age, user)

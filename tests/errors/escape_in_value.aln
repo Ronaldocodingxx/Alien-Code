@@ -1,0 +1,6 @@
+# expect: E032
+fn f(xs) {
+  for x in xs {
+    y := 1 + if x { break } else { 2 }
+  }
+}

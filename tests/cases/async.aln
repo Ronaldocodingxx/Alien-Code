@@ -1,0 +1,10 @@
+fn later(x) {
+  await sleep(5)
+  x * 2
+}
+r := await later(21)
+print(r)
+rs := await Promise.all(map([1, 2, 3], later))
+print(rs)
+f := fn() await later(1)
+print(await f())

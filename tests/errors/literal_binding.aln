@@ -1,0 +1,2 @@
+# expect: E041
+for 1 in [1] { }

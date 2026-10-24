@@ -1,0 +1,2 @@
+# expect: E050
+use "./does_not_exist.aln" as d

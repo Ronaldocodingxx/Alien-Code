@@ -1,0 +1,24 @@
+p := {name: "ada", tags: ["x", "y"], "with space": 1}
+print(p)
+print(p.name, p.tags[1], p["with space"])
+p.age = 36
+p.tags = [...p.tags, "z"]
+print(keys(p), len(p))
+print([1, [2, 3]] == [1, [2, 3]], {a: 1} == {a: 1}, {a: 1} != {a: 2})
+print(nil == nil, nil, type(nil), type([]), type({}), type(1), type("s"), type(print))
+print(p?.missing?.deep ?? "default")
+print(sort([3, 1, 2]), sort(["b", "a"]), sort([{n: 2}, {n: 1}], fn(o) o.n))
+print(group([1, 2, 3, 4], fn(x) if x % 2 == 0 { "even" } else { "odd" }))
+print(uniq([1, 1, 2]), rev([1, 2]), rev("abc"), zip([1, 2], ["a", "b"]))
+print(split("a,b", ","), join(["a", "b"], "-"), upper("x"), trim("  y "), replace("aXbX", "X", "-"))
+print("{1 + 2} and \{literal\}", "multi\nline")
+print(num("42") + 1, num("nope"), int("3.9"), 7 // 2, 2 ** 10, -2 ** 2)
+[a, b, ...rest] := [1, 2, 3, 4]
+print(a, b, rest)
+m := new Map()
+m.set("k", 1)
+print(m, m.get("k"), has(m, "k"), has([1, 2], 2), has("hello", "ell"), has({a: 1}, "a"))
+print("hi".toUpperCase(), Math.max(1, 5), [1, 2, 3].includes(2))
+print(min([4, 2, 8]), max(4, 9), sum([1, 2, 3]), sum([{v: 2}, {v: 3}], fn(o) o.v))
+print(tojson({a: [1, nil]}), json("\{\"b\": 2\}").b)
+print([1, 2, 3, 4] |> filter(fn(x) x > 1) |> map(fn(x) x * 10) |> join(_, "+"))
