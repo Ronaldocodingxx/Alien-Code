@@ -25,6 +25,7 @@ src/codegen.js   AST -> JS + source map; name resolution and compile-time checks
 src/runtime.js   prelude functions + internal helpers ($rt.*) used by generated code
 src/prelude.js   prelude name list (derived from runtime.js exports)
 src/compile.js   public API: compile(src, opts) -> {code, deps}
+src/map.js       code map for agents (alien map/show/put): parts, line ranges, dependencies
 std/*.aln        standard library, written in Alien (`use "alien:web"`); keep it Alien, not JS
 bin/alien.js     CLI, module loader hook (.aln imports), test runner, error formatting
 tests/run.js     test suite (cases/, errors/, unit/, examples/)
@@ -90,3 +91,5 @@ test "name" { assert(add(1, 2) == 3) }
 ```
 
 Before running a program you wrote, run `alien check --json file.aln` and fix every error.
+In files over ~150 lines use `alien map` / `alien show` / `alien put` instead of reading and editing the whole file
+(~85% fewer tokens per change, measured).

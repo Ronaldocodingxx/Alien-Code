@@ -22,6 +22,7 @@ New codes: pick the next free number in the matching range and add a test in `te
 | E041 | literal pattern outside `match` | bind a name, then compare |
 | E050 | file or module not found | paths in `use` are relative to the importing file |
 | E051 | `alien build` input outside the entry file's directory | move the module under the entry directory |
+| E060 | `alien show/put`: no part with that name | run `alien map` for the exact names |
 | E099 | internal compiler error | this is a compiler bug: add a failing test and fix `src/` |
 
 Runtime errors are not coded; they report the JS error name, message and `.aln` file:line frames:

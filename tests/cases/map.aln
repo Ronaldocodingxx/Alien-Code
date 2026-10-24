@@ -1,0 +1,23 @@
+# code map (src/map.js) used from Alien itself
+use "../../src/map.js" {mapSource, replacePart}
+
+SRC := "use \"node:path\" as path
+
+# adds one
+fn inc(x) x + 1
+
+LIMIT := 10
+
+fn run(n) \{
+  status := inc(n)
+  if status < LIMIT \{ status \} else \{ 0 \}
+\}
+
+print(run(1))
+print(run(2))
+"
+
+m := mapSource(SRC, "demo.aln")
+for p in m.parts { print(p.name, p.kind, p.from, p.to, p.uses, p.usedBy, p.doc) }
+print(replacePart(SRC, "demo.aln", "inc", "fn inc(x) x + 2") |> lines |> filter(starts(it, "fn inc")))
+print(len(lines(replacePart(SRC, "demo.aln", "newPart", "fn newPart() 1"))) - len(lines(SRC)))

@@ -1,0 +1,8 @@
+node:path use 1 1 [] [] 
+inc fn 3 4 [] ["run"] adds one
+LIMIT val 6 6 [] ["run"] 
+run fn 8 11 ["inc", "LIMIT"] ["print()", "print()#2"] 
+print() stmt 13 13 ["run"] [] 
+print()#2 stmt 14 14 ["run"] [] 
+["fn inc(x) x + 2"]
+2

@@ -8,6 +8,7 @@ import { resolve, relative, dirname, join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { compile } from "../src/compile.js";
 import { AlienError } from "../src/errors.js";
+import { mapSource, findPart, replacePart } from "../src/map.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
@@ -23,6 +24,10 @@ usage:
   alien eval "<code>"              run code, print value of last expression
   alien test [file|dir ...]        run test blocks (dir: *_test.aln + files with tests)
   alien check <file|dir ...>       compile only, report all errors
+  alien map <file|dir>             index of a file's parts: lines, size, uses / used by
+  alien show <file> <name...>      print only these parts (name or a line number)
+  alien put <file> <name>          replace part <name> with code from stdin (or --code "..."),
+                                   append if new, --delete to remove; refuses if it breaks the build
   alien emit <file.aln>            print generated JavaScript
   alien build <file.aln> [-o dir]  write standalone .mjs files (default dir: dist)
   alien spec                       print the language spec (read this first)
@@ -185,6 +190,65 @@ function cmdCheck(targets) {
   if (errors.length) process.exitCode = 1;
 }
 
+// ---------- code map: read and edit big files part by part ----------
+
+function readAln(file) {
+  const abs = resolve(file ?? "");
+  if (!file || !existsSync(abs)) throw new AlienError("E050", `file not found: ${file ?? "(missing)"}`, file ?? "<cli>", 1, 1);
+  const src = readFileSync(abs, "utf8").replace(/\r\n/g, "\n");
+  sources.set(disp(abs), src);
+  return { abs, src, display: disp(abs) };
+}
+
+function fmtPart(p) {
+  const range = p.from === p.to ? `${p.from}` : `${p.from}-${p.to}`;
+  const sig = p.kind === "fn" ? (/fn\s+(\w+\([^)]*\))/.exec(p.sig)?.[1] ?? p.name) : p.kind === "stmt" ? `${p.name}  ${p.sig}` : p.name;
+  let s = `  ${range.padEnd(8)} ${p.kind.padEnd(4)} ${sig}  ~${p.tok}`;
+  if (p.uses.length) s += `  uses:${p.uses.join(",")}`;
+  if (p.usedBy.length) s += `  by:${p.usedBy.join(",")}`;
+  if (p.doc) s += `  # ${p.doc.slice(0, 80)}`;
+  return s;
+}
+
+function cmdMap(targets) {
+  const maps = expand(targets).map((abs) => { const { src, display } = readAln(abs); return mapSource(src, display); });
+  if (JSON_OUT) return console.log(JSON.stringify(maps.length === 1 ? maps[0] : maps));
+  for (const m of maps) console.log(`${m.file}  ${m.lines} lines ~${m.tok} tok\n${m.parts.map(fmtPart).join("\n")}`);
+}
+
+function cmdShow([file, ...names]) {
+  const { src, display } = readAln(file);
+  const m = mapSource(src, display);
+  const lines = src.split("\n");
+  const out = [];
+  for (const n of names) {
+    const p = findPart(m, n);
+    if (!p) throw new AlienError("E060", `no part named '${n}' in ${display}`, display, 1, 1, "run alien map to list part names");
+    out.push({ name: p.name, from: p.from, to: p.to, code: lines.slice(p.from - 1, p.to).join("\n") });
+  }
+  if (JSON_OUT) console.log(JSON.stringify(out));
+  else console.log(out.map((p) => `# ${display}:${p.from}-${p.to} ${p.name}\n${p.code}`).join("\n\n"));
+}
+
+// replace one part by name (or append when the name is new); only writes if the whole file still compiles
+async function cmdPut(argv) {
+  const [file, name] = argv;
+  const del = argv.includes("--delete");
+  const ci = argv.indexOf("--code");
+  let code = ci >= 0 ? argv[ci + 1] : null;
+  if (!name) throw new AlienError("E060", "usage: alien put <file.aln> <name> [--code \"...\" | --delete]  (code from stdin otherwise)", "<cli>", 1, 1);
+  if (del) code = "";
+  if (code === null) { const chunks = []; for await (const c of process.stdin) chunks.push(c); code = Buffer.concat(chunks).toString("utf8"); }
+  const { abs, src, display } = readAln(file);
+  const next = del ? replacePart(src, display, name, "").replace(/\n\n\n+/g, "\n\n") : replacePart(src, display, name, code);
+  compileFile(abs, next); // throws -> file stays unchanged
+  writeFileSync(abs, next);
+  const p = del ? null : findPart(mapSource(next, display), /^\d+$/.test(name) ? name : code.match(/^\s*(?:pub\s+)?fn\s+(\w+)|^\s*(?:pub\s+)?(\w+)\s*:=/m)?.slice(1).find(Boolean) ?? name);
+  const info = { ok: true, file: display, part: p ? { name: p.name, from: p.from, to: p.to } : null, deleted: del };
+  if (JSON_OUT) console.log(JSON.stringify(info));
+  else console.log(del ? `ok: deleted ${name} from ${display}` : `ok: ${display}:${p ? `${p.from}-${p.to} ${p.name}` : name}`);
+}
+
 function cmdEmit([file]) {
   const abs = resolve(file ?? "");
   const r = compileFile(abs, readFileSync(abs, "utf8"), { map: false });
@@ -285,6 +349,9 @@ try {
     case "test": await cmdTest(rest); break;
     case "check": cmdCheck(rest); break;
     case "emit": cmdEmit(rest); break;
+    case "map": cmdMap(rest); break;
+    case "show": cmdShow(rest); break;
+    case "put": await cmdPut(rest); break;
     case "build": cmdBuild(rest); break;
     case "spec": process.stdout.write(readFileSync(join(ROOT, "docs", "SPEC.md"), "utf8")); break;
     case "version": case "--version": case "-v": console.log(VERSION); break;

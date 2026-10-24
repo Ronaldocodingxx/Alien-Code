@@ -235,7 +235,14 @@ args (CLI args after the file name: `alien run f.aln a b` -> ["a", "b"])   exit(
 alien run file.aln [args]     alien eval "code"      alien test [path]
 alien check path [--json]     alien emit file.aln    alien build file.aln -o dist
 alien spec                    alien version
+alien map path                alien show file name...    alien put file name [--code "..." | --delete]
 ```
+
+**Big files: never read the whole file.** `alien map f.aln` lists every top-level part (fn, value, statement)
+with lines, size (~tokens), `uses:` and `by:` (dependencies). Then `alien show f.aln home card` prints only those
+parts, and `alien put f.aln card --code "fn card(x) ..."` replaces one part by name (or stdin; a new name appends,
+`--delete` removes). `put` only writes if the whole file still compiles, otherwise it prints the errors and changes nothing.
+Leading `#` comment lines belong to the part below them and appear in the map, so document parts that way.
 
 `--json` gives one JSON object on stdout: `{"ok": false, "errors": [{"code", "msg", "file", "line", "col", "hint"}]}`.
 Runtime errors report `.aln` file and line. Error codes: `docs/ERRORS.md`.

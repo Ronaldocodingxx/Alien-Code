@@ -32,6 +32,7 @@ remove it here when done and add anything new you discover. Keep each item one l
 
 ## Done
 
+- v0.4.0: `alien map` / `show` / `put` — read and edit big files part by part.
 - v0.3.0: `it` short lambdas, `[...]`/`{}` patterns, `tally`, token benchmark (`npm run bench:tokens`).
 - v0.2.0: `alien:web` / `alien:html` (websites in pure Alien, browser code via `client`), `here`.
 - v0.1.0: lexer, parser, JS codegen with source maps, compile-time name checks, match, pipes,

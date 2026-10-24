@@ -4,6 +4,13 @@ All notable changes. Agents: add entries under `## Unreleased`; mark breaking ch
 
 ## Unreleased
 
+## 0.4.0 — 2026-10-24
+
+- Code map for agents: `alien map` (parts with lines, ~tokens, uses/used-by, doc comments), `alien show`
+  (read only named parts), `alien put` (replace/append/delete one part by name; refuses changes that break the build).
+  Measured on a 150-line site: changing one function costs 342 instead of 2280 tokens (-85%).
+- Match pattern `[...]` / `{}` docs; error code E060.
+
 ## 0.3.0 — 2026-10-24
 
 - `it` short lambdas: `users |> filter(it.age >= 18) |> map(it.name)` (E023 when misused).
