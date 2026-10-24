@@ -1,0 +1,11 @@
+# `it` short lambdas in the function slot of map/filter/... (innermost call wins)
+users := [{name: "ada", age: 36, tags: ["x", "y"]}, {name: "bob", age: 12, tags: []}]
+print(users |> filter(it.age >= 18) |> map(upper(it.name)) |> sort |> join(", "))
+print(map(users, fn(u) filter(u.tags, it != "x")))
+print(sum(users, it.age), sort(users, it.age) |> map(it.name), [1, 2, 3].map(it * 10))
+print(group(users, if it.age > 18 { "adult" } else { "kid" }) |> keys)
+print(find(users, it.name == "bob").age, any(users, it.age > 30), all(users, has(it, "tags")), count(users, len(it.tags) > 0))
+print(index([5, 6, 7], it > 5), map([[1, 2], [3]], len(it)))
+print(tally(["a", "b", "a"]), tally(users, it.age > 18))
+fn kind(v) match v { [...] => "list", {} => "obj", _ => "other" }
+print(map([[1], {a: 1}, 3], kind))

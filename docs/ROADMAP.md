@@ -22,15 +22,17 @@ remove it here when done and add anything new you discover. Keep each item one l
 
 ## Ideas (not yet decided)
 
+- More token savings, each must be proven with `npm run bench:tokens` and add more benchmark tasks first:
+  e.g. `.field` shorthand in it-slots, compact canonical format from `alien fmt`.
+
 - `mean`/`avg` in the prelude; `sort` with a comparator fn (requested by agent test).
 - WebAssembly backend for numeric hot loops.
 - Built-in structured concurrency helpers (`parallel(list, fn)` with a concurrency limit).
 - `defer` for cleanup.
-- Token-count benchmark: same programs in Alien / JS / Python, measured with a real tokenizer,
-  tracked in `bench/` to keep the language honest about its main goal.
 
 ## Done
 
+- v0.3.0: `it` short lambdas, `[...]`/`{}` patterns, `tally`, token benchmark (`npm run bench:tokens`).
 - v0.2.0: `alien:web` / `alien:html` (websites in pure Alien, browser code via `client`), `here`.
 - v0.1.0: lexer, parser, JS codegen with source maps, compile-time name checks, match, pipes,
   modules + JS interop, async, test blocks, `run/eval/test/check/emit/build/spec` CLI with `--json`.

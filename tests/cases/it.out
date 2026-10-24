@@ -1,0 +1,8 @@
+ADA
+[["y"], []]
+48 ["bob", "ada"] [10, 20, 30]
+["adult", "kid"]
+12 true true 1
+1 [2, 1]
+{a: 2, b: 1} {true: 1, false: 1}
+["list", "obj", "other"]

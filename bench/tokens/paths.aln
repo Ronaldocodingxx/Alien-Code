@@ -1,0 +1,7 @@
+fn paths(v, p = "") match v {
+  [...] => indexed(v) |> map(fn([i, x]) paths(x, "{p}[{i}]")) |> flat
+  {} => entries(v) |> map(fn([k, x]) paths(x, if p == "" { k } else { "{p}.{k}" })) |> flat
+  _ => ["{p}: {type(v)}"]
+}
+data := {a: {b: [1, {c: "x"}]}, d: true}
+for line in paths(data) { print(line) }

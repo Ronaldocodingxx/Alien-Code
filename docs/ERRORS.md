@@ -14,6 +14,7 @@ New codes: pick the next free number in the matching range and add a test in `te
 | E020 | unknown name (or `_` used as a value) | declare it with `:=`, fix the typo (see hint), or use `js.Name` for other JS globals |
 | E021 | assignment to an undeclared name or to a built-in | first assignment must be `x := ...` |
 | E022 | name declared twice in the same block | use `=` to reassign, or rename |
+| E023 | `it` used outside a short-lambda slot, or declared as a variable | use `fn(x) ...`, or rename the variable |
 | E030 | `ret` outside a function | remove it; the file's top level is not a function |
 | E031 | `break` / `continue` outside a loop | |
 | E032 | `ret`/`break`/`continue` inside an `if`/`match`/`try` that is used inside a larger expression | assign first (`x := if ...`) or use the `if` as a statement |

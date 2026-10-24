@@ -4,6 +4,13 @@ All notable changes. Agents: add entries under `## Unreleased`; mark breaking ch
 
 ## Unreleased
 
+## 0.3.0 — 2026-10-24
+
+- `it` short lambdas: `users |> filter(it.age >= 18) |> map(it.name)` (E023 when misused).
+- Match patterns `[...]` (any list) and `{}` (any object, not a list).
+- `tally(xs, keyFn?)` counts occurrences.
+- Token benchmark `npm run bench:tokens` (5 tasks, o200k tokenizer). Totals: Alien 443, Python 487 (-9%), JavaScript 603 (-27%).
+
 ## 0.2.0 — 2026-10-24
 
 - **Websites in pure Alien**: standard library `alien:web` (`serve` with routes/params/JSON/static files,

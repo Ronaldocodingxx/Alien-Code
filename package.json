@@ -1,16 +1,20 @@
 {
   "name": "alien-lang",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Alien: a token-efficient, unambiguous programming language for AI agents. Compiles to JavaScript.",
   "type": "module",
   "bin": {
     "alien": "bin/alien.js"
   },
   "scripts": {
-    "test": "node tests/run.js"
+    "test": "node tests/run.js",
+    "bench:tokens": "node bench/tokens.mjs"
   },
   "engines": {
     "node": ">=22.15"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "js-tiktoken": "^1.0.21"
+  }
 }

@@ -82,12 +82,18 @@ fn greet(name) {                    # block body: value of last expression is re
 fn first([h, ..._t]) h              # params can be patterns
 fn total(...nums) sum(nums)         # rest param
 double := fn(x) x * 2               # function value (lambda)
+users |> filter(it.age >= 18) |> map(it.name)   # `it` = short lambda, see below
 mk := fn(x) {v: x, n: 1}            # returns an object: `{` + `key:` / `key,` / `"key":` / `...` is an object
 fn find(xs, t) {
   for x in xs { if x == t { ret x } }   # ret = early return
   nil
 }
 ```
+
+**`it` short lambdas**: in the function argument of `map filter find any all count sum sort group each index tally`
+(and JS methods `.map .filter .find .findIndex .some .every .forEach .flatMap`) an expression using `it` becomes `fn(it) ...`:
+`sort(users, it.age)`, `[1, 2].map(it * 10)`, `tally(words, lower(it))`. Nested calls: `it` belongs to the innermost one,
+so use `fn(u)` for the outer element. `it` anywhere else, or declaring a variable named `it`, is error E023.
 
 `fn f() {}` has an empty block body (returns nil); `x := {}` is an empty object.
 Named `fn` declarations are hoisted within their block (mutual recursion works). Closures capture variables.
@@ -120,6 +126,8 @@ desc := match value {
   [a, b] => "pair {a} {b}"                # list of exactly 2
   [h, ...t] => "head {h}"                 # list of >= 1
   {type: "circle", r} => 3.14 * r * r     # object having these keys; nested patterns allowed
+  [...] => "any list"                     # [...] any list, {} any object (never a list)
+  {} => "any object"
   n if n > 100 => "big"                   # name binds anything; `if` adds a guard
   _ => { other(); "other" }               # _ matches anything; block body
 }
@@ -211,7 +219,7 @@ index(xs, f|value) -> i|nil                 any(xs, f?)  all(xs, f?)  count(xs, 
 sum(xs, f?)   min(xs)|min(a, b..)   max(...)     sort(xs, keyFn?, desc=false) (numbers sort numerically)
 rev(xs|str)   uniq(xs)   flat(xs, depth=1)   zip(a, b, ...)   indexed(xs) -> [[i, x]]
 take(xs, n)   drop(xs, n)   first(xs)   last(xs)   push(xs, ...v) -> xs   pop(xs)
-slice(x, a, b?)   join(xs, sep="")   group(xs, keyFn) -> {key: [x]}   chunk(xs, n)
+slice(x, a, b?)   join(xs, sep="")   group(xs, keyFn) -> {key: [x]}   tally(xs, keyFn?) -> {key: count}   chunk(xs, n)
 keys(o)  vals(o)  entries(o)  has(coll, x) (list item / substring / object key / Map key)
 get(o, k, default=nil)   merge(...objs)   copy(x) (deep clone)
 split(s, sep="")  lines(s)  trim(s)  upper(s)  lower(s)  replace(s, a, b) (all)  starts(s, p)  ends(s, p)  chars(s)

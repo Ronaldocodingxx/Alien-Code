@@ -233,7 +233,11 @@ class Parser {
       const items = [];
       let rest = null;
       while (!this.isOp("]")) {
-        if (this.eat("op", "...")) { rest = this.expect("id", undefined, "rest name").v; break; }
+        if (this.eat("op", "...")) {
+          // [...] / [..._]: any further items, unnamed
+          rest = this.is("id") ? this.next().v : "_";
+          break;
+        }
         items.push(this.pattern(allowLit));
         if (!this.eat("op", ",")) break;
       }

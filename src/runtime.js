@@ -168,6 +168,11 @@ export function group(xs, f) {
   for (const x of toList(xs)) (out[f(x)] ??= []).push(x);
   return out;
 }
+export function tally(xs, f) {
+  const out = {};
+  for (const x of toList(xs)) { const k = f ? f(x) : x; out[k] = (out[k] ?? 0) + 1; }
+  return out;
+}
 export function chunk(xs, n) { const l = toList(xs), out = []; for (let i = 0; i < l.length; i += n) out.push(l.slice(i, i + n)); return out; }
 
 // ---------- prelude: objects ----------

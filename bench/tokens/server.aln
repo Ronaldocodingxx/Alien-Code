@@ -1,0 +1,7 @@
+use "alien:web" {serve, h, page}
+items := []
+serve({
+  "/": fn(req) page({title: "Items", body: [h.h1("Items"), h.ul(map(items, h.li(it)))]}),
+  "/api/items": fn(req) items,
+  "POST /api/items": fn(req) { push(items, req.body.name); {ok: true} },
+}, {port: 0, quiet: true}).close()

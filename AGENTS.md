@@ -46,7 +46,10 @@ so `.aln` files import each other directly. `alien build` writes `.mjs` files in
 6. **JS speed.** Generated code should be what a careful human would write in JS. Avoid runtime
    helpers in hot paths; check with `alien emit` and `bench/`.
 7. **JS values are Alien values.** Interop must stay free (no wrappers, no conversion).
-8. **The spec must stay small.** `docs/SPEC.md` should be readable in one pass (target < 4k tokens).
+8. **Measure, don't guess.** Token claims are checked with `npm run bench:tokens` (same tasks in Alien,
+   Python, JS). Exotic symbols and number codes cost MORE tokens and hurt model accuracy; savings come
+   from structure (no boilerplate, `it`, pipes, a good prelude).
+9. **The spec must stay small.** `docs/SPEC.md` should be readable in one pass (target < 4k tokens).
    If a feature needs a long explanation, it is probably the wrong feature.
 
 ## Protocol for improving Alien
@@ -63,6 +66,8 @@ so `.aln` files import each other directly. `alien build` writes `.mjs` files in
 5. Update `docs/SPEC.md` (language), `docs/ERRORS.md` (new codes), `CHANGELOG.md`
    (under `## Unreleased`), and `docs/ROADMAP.md` (remove done items, add ideas you discovered).
 6. Run `npm test`; everything must pass. Check `alien emit` output for the feature looks like clean JS.
+   For syntax or prelude changes also run `npm run bench:tokens` (needs `npm install` once): the Alien TOTAL
+   must not get worse. Record the new numbers in CHANGELOG.md. Token savings never justify ambiguity.
 7. Versioning (pre-1.0): new feature -> bump minor in `package.json` when releasing; bug fix -> patch.
    A change that breaks existing Alien code must be listed under **BREAKING** in `CHANGELOG.md`
    together with how to migrate.

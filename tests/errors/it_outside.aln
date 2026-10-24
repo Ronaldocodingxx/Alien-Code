@@ -1,0 +1,2 @@
+# expect: E023
+f := fn(x) it + 1

@@ -1,0 +1,8 @@
+todos := []
+fn add(title) push(todos, {id: len(todos) + 1, title, done: false})
+fn complete(id) { find(todos, it.id == id).done = true }
+fn pending() filter(todos, !it.done) |> map(it.title)
+add("write spec")
+add("ship it")
+complete(1)
+print(pending())

@@ -35,6 +35,32 @@ const JS_GLOBALS = new Set([
 ]);
 
 const CONTROL = new Set(["If", "Match", "Try"]);
+
+// `it` short lambdas: allowed only in the function slot of these calls (prelude fn -> arg 1, JS method -> arg 0)
+const IT_PRELUDE = new Set(["map", "filter", "find", "any", "all", "count", "sum", "sort", "group", "each", "index", "tally"]);
+const IT_METHODS = new Set(["map", "filter", "find", "findIndex", "some", "every", "forEach", "flatMap"]);
+
+// which argument of call e is a function slot that takes `it` (or -1)
+function itSlot(e, scope) {
+  const c = e.callee;
+  if (c.k === "Id" && IT_PRELUDE.has(c.name) && !scope.has(c.name)) return 1;
+  if (c.k === "Member" && IT_METHODS.has(c.name)) return 0;
+  return -1;
+}
+
+// does n use `it` that belongs to the enclosing slot? (nested fn and nested it-slots own theirs)
+function usesIt(n, scope) {
+  if (!n || typeof n !== "object") return false;
+  if (Array.isArray(n)) return n.some((x) => usesIt(x, scope));
+  if (n.k === "Id") return n.name === "it";
+  if (n.k === "Fn" || n.k === "FnDecl") return false;
+  if (n.k === "Call") {
+    const slot = itSlot(n, scope);
+    return usesIt(n.callee, scope) || n.args.some((a, i) => i !== slot && usesIt(a, scope));
+  }
+  for (const key in n) if (n[key] && typeof n[key] === "object" && usesIt(n[key], scope)) return true;
+  return false;
+}
 const NUMERIC_OPS = new Set(["+", "-", "*", "/", "//", "%", "**", "<", "<=", ">", ">=", "==", "!="]);
 const RETURN = (v) => `return ${v};`;
 
@@ -82,7 +108,7 @@ function findEscape(n, loops) {
 function patNames(p) {
   switch (p.k) {
     case "PId": return [p.name];
-    case "PArr": return [...p.items.flatMap(patNames), ...(p.rest ? [p.rest] : [])];
+    case "PArr": return [...p.items.flatMap(patNames), ...(p.rest && p.rest !== "_" ? [p.rest] : [])];
     case "PObj": return p.props.flatMap((x) => patNames(x.pat));
   }
   return [];
@@ -157,7 +183,8 @@ class Gen {
     return r.map(([c, l]) => `\x01${l}\x01${c}`).join("\n");
   }
 
-  declare(name, scope, node) {
+  declare(name, scope, node, internal = false) {
+    if (name === "it" && !internal) throw this.err("E023", "'it' is reserved for short lambdas and cannot be declared", node, "pick another name");
     if (scope.vars.has(name))
       throw this.err("E022", `'${name}' is already declared in this scope`, node, `reassign with ${name} = ..., or pick a new name`);
     scope.vars.add(name);
@@ -173,6 +200,7 @@ class Gen {
   id(node, scope) {
     const n = node.name;
     if (n === "_") throw this.err("E020", "'_' is a placeholder, not a value", node, "use _ in patterns or as the |> argument slot: x |> f(a, _)");
+    if (n === "it" && !scope.has(n)) throw this.err("E023", "'it' is only defined in the function argument of map/filter/find/any/all/count/sum/sort/group/each/index", node, "write fn(x) ... for other functions");
     if (scope.has(n)) return mangle(n);
     if (PRELUDE.has(n)) { this.prelude.add(n); return `$${n}`; }
     if (n === "js") return "globalThis";
@@ -406,10 +434,10 @@ class Gen {
       case "PArr":
         conds.push(`Array.isArray(${acc})`, `${acc}.length ${p.rest ? ">=" : "==="} ${p.items.length}`);
         p.items.forEach((x, i) => this.patTest(x, `${acc}[${i}]`, conds, binds, scope));
-        if (p.rest) { this.declare(p.rest, scope, p); binds.push([mangle(p.rest), `${acc}.slice(${p.items.length})`]); }
+        if (p.rest && p.rest !== "_") { this.declare(p.rest, scope, p); binds.push([mangle(p.rest), `${acc}.slice(${p.items.length})`]); }
         return;
       case "PObj":
-        conds.push(`${acc} != null && typeof ${acc} === "object"`);
+        conds.push(`${acc} != null && typeof ${acc} === "object" && !Array.isArray(${acc})`);
         for (const { key, pat } of p.props) {
           conds.push(`${JSON.stringify(key)} in ${acc}`);
           this.patTest(pat, `${acc}[${JSON.stringify(key)}]`, conds, binds, scope);
@@ -420,12 +448,12 @@ class Gen {
   bindPat(p, scope, declare) {
     switch (p.k) {
       case "PId":
-        if (declare) this.declare(p.name, scope, p);
+        if (declare) this.declare(p.name, scope, p, p.internal);
         return mangle(p.name);
       case "PWild": return `$_${++this.n}`;
       case "PArr": {
         const items = p.items.map((x) => (x.k === "PWild" ? "" : this.bindPat(x, scope, declare)));
-        if (p.rest) {
+        if (p.rest && p.rest !== "_") {
           if (declare) this.declare(p.rest, scope, p);
           items.push(`...${mangle(p.rest)}`);
         }
@@ -532,7 +560,13 @@ class Gen {
       if (a0.k === "Bin" && a0.op === "==") return `$rt.assertEq(${this.expr(a0.left, scope)}, ${this.expr(a0.right, scope)}, ${text}, ${loc})`;
       return `$rt.assert(${this.expr(a0, scope)}, ${text}, ${loc})`;
     }
-    return `${this.expr(c, scope)}(${e.args.map((x) => this.arg(x, scope)).join(", ")})`;
+    const slot = itSlot(e, scope);
+    const args = e.args.map((x, i) => {
+      if (i !== slot || x.k === "Fn" || x.k === "Spread" || !usesIt(x, scope)) return x;
+      const p = { k: "PId", name: "it", line: x.line, col: x.col, internal: true };
+      return { k: "Fn", params: [{ rest: false, pat: p, def: null }], body: x, line: x.line, col: x.col, pos: x.pos, end: x.end };
+    });
+    return `${this.expr(c, scope)}(${args.map((x) => this.arg(x, scope)).join(", ")})`;
   }
 
   simpleBlock(b) { return b.body.length === 0 || (b.body.length === 1 && b.body[0].k === "ExprStmt"); }
